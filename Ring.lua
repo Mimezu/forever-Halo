@@ -879,12 +879,9 @@ function H.CameraState()
     local names = {}
     for _, set in ipairs(manager and manager.bindingSetStack or {}) do names[#names + 1] = tostring(set.name) end
     local shown = {}
-    for _, name in ipairs({ "GamepadRadial", "GamepadFlyout", "ClassActionFlyout", "SpellFlyoutRadial" }) do
+    for _, name in ipairs(RADIALS) do
         local f = _G[name]
         if f and f.IsShown and f:IsShown() then shown[#shown + 1] = name end
-    end
-    for _, f in ipairs({ _G.GamepadFlyoutFrame, _G.ClassActionFlyoutFrame }) do
-        if f and f.IsShown and f:IsShown() then shown[#shown + 1] = f:GetName() or "flyout" end
     end
     H.Print(("Blizzard binding sets: %s | radials shown: %s | free-look %s | cursor control %s"):format(
         #names > 0 and table.concat(names, ", ") or "none", #shown > 0 and table.concat(shown, ", ") or "none",

@@ -1599,7 +1599,10 @@ H.On("login", function()
         open:SetPoint("TOPLEFT", 16, -16)
         open:SetText("Open Halo")
         open:SetScript("OnClick", function()
-            if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
+            -- Closing a Blizzard panel from addon code runs the gamepad window manager with
+            -- addon taint (the "A and B dead until /reload" bug), so in the gamepad interface
+            -- Settings stays open behind the Halo window.
+            if SettingsPanel and SettingsPanel:IsShown() and not H.IsGamepadInterface() then HideUIPanel(SettingsPanel) end
             H.ToggleOptions(1)
         end)
         local note = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
