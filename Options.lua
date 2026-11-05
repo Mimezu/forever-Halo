@@ -308,49 +308,251 @@ local function OpenMacroEditor(slice)
     macroEditor.textBox:SetFocus()
 end
 
+-- Popup menu ---------------------------------------------------------------------------------------
+-- Halo's own dropdown. Blizzard's context menus opened from addon code run the gamepad
+-- window manager under addon taint (the "A and B dead until /reload" bug), so the window uses
+-- this one: a leather panel with the Legacy rim, rows the mouse or the gamepad cursor clicks,
+-- submenus that open on hover or click. Escape, or a click anywhere else, closes it.
+-- Entries: { text, func }               an item: func() runs and the menu closes
+--          { text, items = { ... } }    a submenu (disabled = true greys it out)
+--          { text, radio = get, func }  a choice; a dot marks it while get() is true
+--          { title = text }             a heading
+--          { note = text }              a dim line
+--          { divider = true }
+local popup = { panels = {}, open = false }
+H.Popup = popup   -- (tests)
+local ROW_H, MENU_PAD, MENU_MIN_W = 20, 8, 150
+
+local function ClosePopupFrom(level)
+    for i = #popup.panels, level, -1 do popup.panels[i]:Hide() end
+end
+
+local function ClosePopup()
+    ClosePopupFrom(1)
+    if popup.catcher then popup.catcher:Hide() end
+    popup.open, popup.owner = false, nil
+end
+popup.Close = ClosePopup
+function popup.IsOpen() return popup.open end
+
+local function PopupPanel(level)
+    if popup.panels[level] then return popup.panels[level] end
+    local panel = CreateFrame("Frame", nil, frame)
+    panel:SetFrameLevel(frame:GetFrameLevel() + 100 + level * 10)
+    panel:EnableMouse(true)
+    panel:SetClampedToScreen(true)
+    skin.Panel(panel)
+    panel.level, panel.rows = level, {}
+    panel:Hide()
+    popup.panels[level] = panel
+    return panel
+end
+
+local ShowPopupLevel
+local function PopupHover(row)
+    local entry = row.entry
+    if entry.items and not entry.disabled then
+        ShowPopupLevel(row.panel.level + 1, entry.items, row, "TOPLEFT", "TOPRIGHT", 2, MENU_PAD)
+    else
+        ClosePopupFrom(row.panel.level + 1)
+    end
+end
+
+local function PopupClick(row)
+    local entry = row.entry
+    if entry.disabled then return end
+    if entry.items then
+        -- The gamepad cursor may click rather than hover: the click opens or closes the submenu.
+        local sub = popup.panels[row.panel.level + 1]
+        if sub and sub:IsShown() and sub.anchorRow == row then ClosePopupFrom(row.panel.level + 1)
+        else PopupHover(row) end
+        return
+    end
+    PlaySound(SOUNDKIT.U_CHAT_SCROLL_BUTTON)
+    ClosePopup()
+    if entry.func then entry.func() end
+end
+
+local function PopupRow(panel, i)
+    local row = panel.rows[i]
+    if row then return row end
+    row = CreateFrame("Button", nil, panel)
+    row.panel = panel
+    row:SetHeight(ROW_H)
+    row.text = row:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    row.text:SetPoint("LEFT", 20, 0)
+    row.text:SetPoint("RIGHT", -18, 0)
+    row.text:SetJustifyH("LEFT")
+    row.text:SetWordWrap(false)
+    row.hover = row:CreateTexture(nil, "HIGHLIGHT")
+    row.hover:SetPoint("TOPLEFT", 4, 0); row.hover:SetPoint("BOTTOMRIGHT", -4, 0)
+    row.hover:SetColorTexture(1, 0.8, 0.4, 0.12)
+    row.dot = row:CreateTexture(nil, "ARTWORK")
+    row.dot:SetSize(8, 8)
+    row.dot:SetPoint("LEFT", 8, 0)
+    row.dot:SetTexture(ROUND_MASK)
+    row.dot:SetVertexColor(1, 0.82, 0)
+    row.arrow = row:CreateTexture(nil, "ARTWORK")
+    row.arrow:SetSize(10, 10)
+    row.arrow:SetPoint("RIGHT", -6, 0)
+    if C_Texture.GetAtlasInfo("common-icon-forwardarrow") then row.arrow:SetAtlas("common-icon-forwardarrow") end
+    row.line = row:CreateTexture(nil, "ARTWORK")
+    row.line:SetPoint("LEFT", 8, 0); row.line:SetPoint("RIGHT", -8, 0)
+    row.line:SetHeight(1)
+    row.line:SetColorTexture(0.68, 0.50, 0.26, 0.45)
+    row:SetScript("OnClick", PopupClick)
+    row:SetScript("OnEnter", PopupHover)
+    panel.rows[i] = row
+    return row
+end
+
+-- A submenu opens to the right of its row, or to the left when it would leave the screen.
+local function FitsRight(row, width)
+    local right, edge = row:GetRight(), UIParent:GetRight()
+    right, edge = tonumber(right), tonumber(edge)
+    if not right or not edge then return true end
+    return (right + width) * row:GetEffectiveScale() <= edge * UIParent:GetEffectiveScale()
+end
+
+ShowPopupLevel = function(level, entries, anchor, point, relPoint, x, y)
+    ClosePopupFrom(level)
+    local panel = PopupPanel(level)
+    local width, top = MENU_MIN_W, MENU_PAD
+    for i, entry in ipairs(entries) do
+        local row = PopupRow(panel, i)
+        row.entry = entry
+        local kind = entry.divider and "divider" or entry.title and "title" or entry.note and "note" or "item"
+        local height = kind == "divider" and 9 or kind == "note" and 16 or ROW_H
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", 0, -top)
+        row:SetPoint("TOPRIGHT", 0, -top)
+        row:SetHeight(height)
+        row:EnableMouse(kind == "item")
+        row.line:SetShown(kind == "divider")
+        row.text:SetShown(kind ~= "divider")
+        row.text:SetText(entry.text or entry.title or entry.note or "")
+        row.text:SetFontObject(kind == "title" and "GameFontNormal" or kind == "note" and "GameFontHighlightSmall" or "GameFontHighlight")
+        row.text:SetTextColor(unpack(kind == "note" and NOTE or kind == "title" and GOLD or entry.disabled and DIM or { 1, 1, 1 }))
+        row.hover:SetShown(kind == "item" and not entry.disabled)
+        row.dot:SetShown(kind == "item" and entry.radio ~= nil and entry.radio() == true)
+        row.arrow:SetShown(kind == "item" and entry.items ~= nil)
+        row.arrow:SetAlpha(entry.disabled and 0.4 or 1)
+        local textWidth = row.text:GetStringWidth()
+        width = math.max(width, (tonumber(textWidth) or 0) + 20 + 18 + 8)
+        top = top + height
+        row:Show()
+    end
+    for i = #entries + 1, #panel.rows do panel.rows[i]:Hide() end
+    panel:SetSize(width, top + MENU_PAD)
+    panel.anchorRow = level > 1 and anchor or nil
+    panel:ClearAllPoints()
+    if level > 1 and not FitsRight(anchor, width) then
+        panel:SetPoint("TOPRIGHT", anchor, "TOPLEFT", -2, MENU_PAD)
+    else
+        panel:SetPoint(point, anchor, relPoint, x, y)
+    end
+    panel:Show()
+    return panel
+end
+
+local function OpenPopup(owner, entries)
+    -- The button that opened it closes it again.
+    if popup.open and popup.owner == owner then ClosePopup(); return end
+    ClosePopup()
+    if not popup.catcher then
+        -- Covers the screen under the menu: a click anywhere else closes it. Escape too, when
+        -- the keyboard can be taken (not in combat); other keys pass through.
+        local catcher = CreateFrame("Frame", nil, frame)
+        catcher:SetFrameLevel(frame:GetFrameLevel() + 95)
+        catcher:SetAllPoints(UIParent)
+        catcher:EnableMouse(true)
+        catcher:SetScript("OnMouseDown", ClosePopup)
+        catcher:SetScript("OnKeyDown", function(self, key)
+            if key == "ESCAPE" then
+                pcall(self.SetPropagateKeyboardInput, self, false)
+                ClosePopup()
+            else
+                pcall(self.SetPropagateKeyboardInput, self, true)
+            end
+        end)
+        catcher:Hide()
+        popup.catcher = catcher
+    end
+    popup.open, popup.owner = true, owner
+    if not InCombatLockdown() then
+        pcall(popup.catcher.EnableKeyboard, popup.catcher, true)
+        pcall(popup.catcher.SetPropagateKeyboardInput, popup.catcher, true)
+    end
+    popup.catcher:Show()
+    ShowPopupLevel(1, entries, owner, "TOPLEFT", "BOTTOMLEFT", 0, -2)
+end
+popup.Open = OpenPopup
+
 local function AddMenu(owner)
     local ring = CurrentRing()
     if not ring then return end
-    MenuUtil.CreateContextMenu(owner, function(_, root)
-        root:CreateTitle("Add to " .. ring.name)
-        local auto = root:CreateButton("Automatic")
-        for _, a in ipairs(H.AUTO) do
-            auto:CreateButton(a[2], function() AddSlice({ kind = "auto", source = a[1] }) end)
+    local entries = { { title = "Add to " .. ring.name } }
+    local function Group(text, items)
+        entries[#entries + 1] = { text = text, items = items, disabled = #items == 0 }
+    end
+    local auto = {}
+    for _, a in ipairs(H.AUTO) do
+        auto[#auto + 1] = { text = a[2], func = function() AddSlice({ kind = "auto", source = a[1] }) end }
+    end
+    Group("Automatic", auto)
+    local emotes = {}
+    for _, e in ipairs(H.EMOTES) do
+        emotes[#emotes + 1] = { text = e[2], func = function() AddSlice({ kind = "emote", token = e[1] }) end }
+    end
+    Group("Emote", emotes)
+    local markers = {}
+    for i, name in ipairs(H.MARKERS) do
+        markers[#markers + 1] = { text = name, func = function() AddSlice({ kind = "marker", index = i }) end }
+    end
+    markers[#markers + 1] = { text = "Clear marker", func = function() AddSlice({ kind = "marker", index = 0 }) end }
+    Group("Target marker", markers)
+    local rings = {}
+    for _, other in ipairs(VisibleRings()) do
+        if other.id ~= ring.id then
+            rings[#rings + 1] = { text = other.name, func = function() AddSlice({ kind = "ring", ringID = other.id }) end }
         end
-        local emote = root:CreateButton("Emote")
-        for _, e in ipairs(H.EMOTES) do
-            emote:CreateButton(e[2], function() AddSlice({ kind = "emote", token = e[1] }) end)
+    end
+    Group("Another ring", rings)
+    if C_EquipmentSet and C_EquipmentSet.GetEquipmentSetIDs then
+        local sets = {}
+        for _, id in ipairs(C_EquipmentSet.GetEquipmentSetIDs() or {}) do
+            local name = C_EquipmentSet.GetEquipmentSetInfo(id)
+            if name then sets[#sets + 1] = { text = name, func = function() AddSlice({ kind = "equipset", name = name }) end } end
         end
-        local marker = root:CreateButton("Target marker")
-        for i, name in ipairs(H.MARKERS) do
-            marker:CreateButton(name, function() AddSlice({ kind = "marker", index = i }) end)
-        end
-        marker:CreateButton("Clear marker", function() AddSlice({ kind = "marker", index = 0 }) end)
-        local rings = root:CreateButton("Another ring")
-        local any = false
-        for _, other in ipairs(VisibleRings()) do
-            if other.id ~= ring.id then
-                any = true
-                rings:CreateButton(other.name, function() AddSlice({ kind = "ring", ringID = other.id }) end)
-            end
-        end
-        if not any then rings:SetEnabled(false) end
-        if C_EquipmentSet and C_EquipmentSet.GetEquipmentSetIDs then
-            local ids = C_EquipmentSet.GetEquipmentSetIDs() or {}
-            if #ids > 0 then
-                local sets = root:CreateButton("Equipment set")
-                for _, id in ipairs(ids) do
-                    local name = C_EquipmentSet.GetEquipmentSetInfo(id)
-                    if name then sets:CreateButton(name, function() AddSlice({ kind = "equipset", name = name }) end) end
-                end
-            end
-        end
-        root:CreateButton("Custom macro...", function() OpenMacroEditor(nil) end)
-        root:CreateDivider()
-        root:CreateTitle("Or drag a spell, item, mount, toy, pet")
-        root:CreateTitle("or macro onto the ring.")
-    end)
+        if #sets > 0 then Group("Equipment set", sets) end
+    end
+    entries[#entries + 1] = { text = "Custom macro...", func = function() OpenMacroEditor(nil) end }
+    entries[#entries + 1] = { divider = true }
+    entries[#entries + 1] = { note = "Or drag a spell, item, mount, toy, pet" }
+    entries[#entries + 1] = { note = "or macro onto the ring." }
+    OpenPopup(owner, entries)
 end
+H.AddMenu = AddMenu   -- (tests)
+
+local function StyleMenu(owner)
+    local ring = CurrentRing()
+    if not ring then return end
+    local default = H.RingSkins.Get(H.Option("style"))
+    local entries = {
+        { title = "Style of " .. ring.name },
+        { text = "Default (" .. default.id .. " " .. default.name .. ")",
+          radio = function() return not (ring.style and H.RingSkins.list[ring.style]) end,
+          func = function() ring.style = nil; H.Changed("style") end },
+    }
+    for _, id in ipairs(H.RingSkins.order) do
+        local ringSkin = H.RingSkins.list[id]
+        entries[#entries + 1] = { text = id .. "  " .. ringSkin.name,
+            radio = function() return ring.style == id end,
+            func = function() ring.style = id; H.Changed("style") end }
+    end
+    OpenPopup(owner, entries)
+end
+H.StyleMenu = StyleMenu   -- (tests)
 
 -- The macro whose text is exactly body (account macros, then this character's).
 local function FindRingMacro(body)
@@ -513,22 +715,7 @@ local function BuildRings(page)
     local padButton = KeyCapture(editor, 270, -34, 130, "padKey")
     Tooltip(padButton, "Gamepad button", "Click, then press a gamepad button. Backspace clears it. For combinations like R1 + D-pad down, use Make macro and put the macro on that slot of your gamepad bars.")
     local keyNote = Note(editor, "", 0, -62, EW)
-    local styleButton = Button(editor, "Style", 410, -34, EW - 410, function(self)
-        local ring = CurrentRing()
-        if not ring then return end
-        MenuUtil.CreateContextMenu(self, function(_, root)
-            root:CreateTitle("Style of " .. ring.name)
-            local default = H.RingSkins.Get(H.Option("style"))
-            root:CreateRadio("Default (" .. default.id .. " " .. default.name .. ")",
-                function() return not (ring.style and H.RingSkins.list[ring.style]) end,
-                function() ring.style = nil; H.Changed("style") end)
-            for _, id in ipairs(H.RingSkins.order) do
-                local skin = H.RingSkins.list[id]
-                root:CreateRadio(id .. "  " .. skin.name, function() return ring.style == id end,
-                    function() ring.style = id; H.Changed("style") end)
-            end
-        end)
-    end, 24)
+    local styleButton = Button(editor, "Style", 410, -34, EW - 410, StyleMenu, 24)
     Tooltip(styleButton, "Style", "How this ring looks. Default follows the Styles tab.")
 
     -- The ring drawn as a ring.
@@ -1557,6 +1744,7 @@ local function Build()
             end)
         end
         C_Timer.After(0, function() userClose = false end)
+        ClosePopup()
         if self:IsShown() then return end
         PlaySound(SOUNDKIT.IG_SPELLBOOK_CLOSE)
         if macroEditor then macroEditor:Hide() end

@@ -146,8 +146,7 @@ H.On("aim", function(dir, down, len, x, y, result)
 end)
 
 -- The stick's direction "buttons" (PADRSTICKUP...) only exist when the game's
--- GamePadStickAxisButtons setting is on (off by default). Halo turns it on (out of combat)
--- and remembers the player's own value in HaloDB.stickButtonsSaved.
+-- GamePadStickAxisButtons setting is on (off by default). Halo turns it on (out of combat).
 -- The game only turns the direction keys on when the setting changes while it runs: after
 -- a restart it reads 1 from the config and still sends nothing (seen in 0.9.8: the stick
 -- moved, zero direction keys). So at login and when a gamepad connects, switch it off and
@@ -160,7 +159,6 @@ local function ApplyStickButtons(wake)
         -- A Blizzard radial is open: SyncRadials has the setting off and puts it back on close.
         if stickSuspended then return end
         local woke = false
-        if H.db.stickButtonsSaved == nil then H.db.stickButtonsSaved = GetCVar("GamePadStickAxisButtons") or "0" end
         if wakeStickButtons or GetCVar("GamePadStickAxisButtons") ~= "1" then
             pcall(SetCVar, "GamePadStickAxisButtons", "0")
             pcall(SetCVar, "GamePadStickAxisButtons", "1")

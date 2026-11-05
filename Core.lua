@@ -4,7 +4,7 @@
 local ADDON, H = ...
 Halo = H
 
-H.version = C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version") or "0.9.19"
+H.version = C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version") or "0.9.20"
 H.MAX_SLICES = 12
 
 local DEFAULT_OPTIONS = {
@@ -121,6 +121,9 @@ local function Migrate(db)
     end
     -- 0.9.15: "Stick released: Nothing" is gone (it did not work in combat); it becomes Keep.
     if db.options.padRelease == "none" then db.options.padRelease = "keep" end
+    -- 0.9.20: the player's own stick-direction setting is no longer recorded (nothing has
+    -- restored it since 0.9.15; the setting stays on while Halo is loaded).
+    db.stickButtonsSaved = nil
     for k, v in pairs(DEFAULT_OPTIONS) do
         -- Positions and colours are tables: copy them, so the defaults are never shared.
         if db.options[k] == nil then db.options[k] = type(v) == "table" and { unpack(v) } or v end
@@ -407,9 +410,8 @@ SlashCmdList.HALO = function(message)
         local old = H.db
         HaloDB = Migrate({})
         H.db = HaloDB
-        -- Keep the player's own stick-direction setting (sticky selection puts it back when
-        -- turned off, which the reset does) and the debug log.
-        H.db.stickButtonsSaved, H.db.debug, H.db.debugLog = old.stickButtonsSaved, old.debug, old.debugLog
+        -- Keep the debug setting and log.
+        H.db.debug, H.db.debugLog = old.debug, old.debugLog
         H.Changed("rings")
         H.Fire("options")
         H.Print("Rings and options reset.")

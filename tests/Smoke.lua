@@ -182,7 +182,8 @@ local function Mock(name)
         NumLines = function() return 1 end,
     }
     local fields = { Text = true, text = true, Left = true, Middle = true, Right = true, LeftSeparator = true,
-        RightSeparator = true, SetUseCircularEdge = false, EnableGamePadButton = true }
+        RightSeparator = true, SetUseCircularEdge = false, EnableGamePadButton = true,
+        folderKey = true, ringID = true }   -- plain fields on the ring list's rows (nil until set)
     return setmetatable(obj, { __index = function(_, key)
         if fields[key] then return nil end
         return methods[key] or function() end
@@ -214,8 +215,7 @@ end
 function GetBindingAction(key, checkOverride) return checkOverride and bindTop[key] or "" end
 UIParent, WorldFrame = Mock("UIParent"), Mock("WorldFrame")
 GameTooltip = Mock("GameTooltip")
-MenuUtil = { CreateContextMenu = function() end }
-Settings = { RegisterCanvasLayoutCategory = function() return {} end, RegisterAddOnCategory = function() end }
+Settings ={ RegisterCanvasLayoutCategory = function() return {} end, RegisterAddOnCategory = function() end }
 
 -- Blizzard's gamepad stick listener (Blizzard_GamepadSharedUtility), as a plain table fake.
 inputBindingAxisListener = { left = {}, right = {}, stickOn = false, shown = true,
@@ -241,11 +241,13 @@ for k in pairs(_G) do
     if not before[k] then check(allowed[k], "unexpected global: " .. tostring(k)) end
 end
 
--- ADDON_LOADED + login.
+-- ADDON_LOADED + login. A save from before 0.9.20 still holds stickButtonsSaved.
 local events
 for _, f in ipairs(frames) do if f.scripts.OnEvent and not events then events = f end end
+HaloDB = { stickButtonsSaved = "0" }
 events.scripts.OnEvent(events, "ADDON_LOADED", "Halo")
 check(H.db and #H.db.rings == 3, "starter rings")
+check(H.db.stickButtonsSaved == nil, "the stale stickButtonsSaved key is cleared on load")
 check(H.db.options.hints == true, "help on for a new install")
 events.scripts.OnEvent(events, "PLAYER_LOGIN")
 advance(1)
@@ -568,7 +570,7 @@ stickState.x, stickState.y, stickState.len = 0, 0.1, 0.1
 check(click("aimu", false) == "LeftButton" and button.attributes.spell == "Frostbolt", "a light flick still uses the slice")
 stickState.x, stickState.y, stickState.len = 0, 0, 0
 H.SetOption("padMode", "hold"); padUI = padUIBefore; H.Changed("sticky off"); advance(1); advance(1)
-check(cvars.GamePadStickAxisButtons == "1" and H.db.stickButtonsSaved == "0", "the stick direction buttons stay on (Keep is the base)")
+check(cvars.GamePadStickAxisButtons == "1" and H.db.stickButtonsSaved == nil, "the stick direction buttons stay on (Keep is the base); nothing is recorded")
 
 -- The listener is on only while a ring is open: switching it on freezes the camera for a few
 -- seconds, so Halo never switches it on between rings.
@@ -1048,6 +1050,90 @@ check(HaloOptions.shown, "window stays open beside the macro window")
 H.ToggleOptions(); advance(0.1)
 check(not HaloOptions.shown, "closing it yourself still works")
 MacroFrame:Hide(); H.ToggleOptions()
+
+-- 9b. The Add (+) and Style menus are Halo's own popup: Blizzard's context menus opened from
+-- addon code run the gamepad window manager under addon taint.
+do
+    local menuRing = H.NewRing("Menu ring"); advance(1)
+    H.ToggleOptions(1)
+    local menuRow
+    for _, f in ipairs(frames) do if rawget(f, "ringID") == menuRing.id then menuRow = f end end
+    check(menuRow, "the new ring is listed")
+    menuRow.scripts.OnClick(menuRow)   -- select it
+    local P = H.Popup
+    local owner = CreateFrame("Button")
+    local function rowsOf(level)
+        local list = {}
+        for _, row in ipairs(P.panels[level] and P.panels[level].rows or {}) do if row.shown then list[#list + 1] = row end end
+        return list
+    end
+    local function rowNamed(level, text)
+        for _, row in ipairs(rowsOf(level)) do if row.text.text == text then return row end end
+    end
+    H.AddMenu(owner)
+    check(P.IsOpen() and P.panels[1].shown and P.catcher.shown, "the Add menu opens on a Halo panel over a click catcher")
+    check(P.panels[1].legacyRim ~= nil, "the panel has the Legacy rim (a finished edge)")
+    for _, text in ipairs({ "Add to Menu ring", "Automatic", "Emote", "Target marker", "Another ring", "Custom macro...",
+        "Or drag a spell, item, mount, toy, pet", "or macro onto the ring." }) do
+        check(rowNamed(1, text), "Add menu entry: " .. text)
+    end
+    check(not rowNamed(1, "Equipment set"), "no equipment sets here")
+    check(rowNamed(1, "Another ring").entry.disabled ~= true, "other rings can be nested")
+    check(rowNamed(1, "Add to Menu ring").entry.title and not rowNamed(1, "Add to Menu ring").hover.shown, "the title is not a button")
+    -- Hovering a group opens its submenu; hovering another group swaps it.
+    local emote = rowNamed(1, "Emote")
+    emote.scripts.OnEnter(emote)
+    check(P.panels[2] and P.panels[2].shown and #rowsOf(2) == #H.EMOTES, "hovering Emote opens its submenu")
+    local marker = rowNamed(1, "Target marker")
+    marker.scripts.OnEnter(marker)
+    check(#rowsOf(2) == #H.MARKERS + 1 and rowNamed(2, "Clear marker"), "hovering Target marker swaps the submenu")
+    local custom = rowNamed(1, "Custom macro...")
+    custom.scripts.OnEnter(custom)
+    check(not P.panels[2].shown, "hovering a plain item closes the submenu")
+    marker.scripts.OnEnter(marker)
+    local n0 = #menuRing.slices
+    local star = rowsOf(2)[1]
+    star.scripts.OnClick(star)
+    check(#menuRing.slices == n0 + 1 and menuRing.slices[n0 + 1].kind == "marker" and menuRing.slices[n0 + 1].index == 1,
+        "clicking a submenu row adds the slice")
+    check(not P.IsOpen() and not P.panels[1].shown and not P.panels[2].shown and not P.catcher.shown, "and closes the menu")
+    -- The gamepad cursor clicks rather than hovers: a click on a group opens and closes it too.
+    H.AddMenu(owner)
+    local rings = rowNamed(1, "Another ring")
+    rings.scripts.OnClick(rings)
+    check(P.panels[2].shown and #rowsOf(2) == #H.VisibleRings() - 1, "clicking a group opens its submenu")
+    rings.scripts.OnClick(rings)
+    check(not P.panels[2].shown and P.IsOpen(), "clicking it again closes only the submenu")
+    -- Escape, a click outside, and the button itself close it.
+    P.catcher.scripts.OnKeyDown(P.catcher, "ESCAPE")
+    check(not P.IsOpen() and not P.catcher.shown, "Escape closes the menu")
+    H.AddMenu(owner)
+    P.catcher.scripts.OnMouseDown(P.catcher)
+    check(not P.IsOpen(), "a click outside closes the menu")
+    H.AddMenu(owner); H.AddMenu(owner)
+    check(not P.IsOpen(), "the + button closes the menu it opened")
+    -- Style menu: Default plus one choice per style, the current one marked.
+    local defaultSkin = H.RingSkins.Get(H.Option("style"))
+    local defaultText = "Default (" .. defaultSkin.id .. " " .. defaultSkin.name .. ")"
+    H.StyleMenu(owner)
+    check(P.IsOpen() and rowNamed(1, "Style of Menu ring") and #rowsOf(1) == #H.RingSkins.order + 2, "style menu: title, Default, one row per style")
+    check(rowNamed(1, defaultText).dot.shown, "Default is marked")
+    local bText = "B  " .. H.RingSkins.list.B.name
+    check(not rowNamed(1, bText).dot.shown, "B is not marked yet")
+    rowNamed(1, bText).scripts.OnClick(rowNamed(1, bText)); advance(1)
+    check(menuRing.style == "B" and not P.IsOpen(), "picking a style sets it and closes the menu")
+    H.StyleMenu(owner)
+    check(rowNamed(1, bText).dot.shown and not rowNamed(1, defaultText).dot.shown, "the pick is marked")
+    rowNamed(1, defaultText).scripts.OnClick(rowNamed(1, defaultText)); advance(1)
+    check(menuRing.style == nil, "Default clears the ring's own style")
+    -- Closing the window closes the menu with it.
+    H.StyleMenu(owner)
+    H.ToggleOptions(); advance(0.1)
+    check(not HaloOptions.shown and not P.IsOpen(), "closing the window closes the menu")
+    H.ToggleOptions()
+    H.DeleteRing(menuRing.id); advance(1)
+end
+
 -- Placement tool: drop the outline, Done saves it as a screen fraction.
 H.PlaceRing("padPos", "Gamepad ring")
 check(HaloPlacer.slots[3] and HaloPlacer.slots[3].shown ~= false and HaloPlacer.art ~= nil or H.RingSkins.Get(H.Option("style")).buildRing == nil,
@@ -1070,6 +1156,14 @@ print(("Halo smoke: %d checks passed"):format(assertions))
 for file in toc:gmatch("\n([%w_]+%.lua)") do
     local text = io.open(file):read("*a")
     check(not text:find('"Interface\[%a]'), file .. " has a texture path with a single backslash")
+end
+-- No Blizzard menu or popup code: opened from addon code it runs the gamepad window manager
+-- under addon taint. Halo's own popup (Options.lua) stands in.
+for file in toc:gmatch("\n([%w_]+%.lua)") do
+    local text = io.open(file):read("*a")
+    for _, name in ipairs({ "MenuUtil", "UIDropDownMenu", "StaticPopup", "EasyMenu", "Menu.ModifyMenu" }) do
+        check(not text:find(name, 1, true), file .. " uses Blizzard's " .. name)
+    end
 end
 print(("Halo smoke (with path check): %d checks passed"):format(assertions))
 
@@ -1120,12 +1214,11 @@ H.db.options.padPos[1] = 0.1
 SlashCmdList.HALO("reset yes"); advance(1)
 check(H.db.options.padPos[1] == 0.78, "defaults are not shared with saved options")
 
--- /halo reset yes goes back to Keep (Use is not the default); the stick-direction setting stays on
--- and the player's own value is still remembered.
+-- /halo reset yes goes back to Keep (Use is not the default); the stick-direction setting stays on.
 H.SetOption("padRelease", "use"); advance(1)
-check(cvars.GamePadStickAxisButtons == "1" and H.db.stickButtonsSaved == "0", "sticky selection on")
+check(cvars.GamePadStickAxisButtons == "1" and H.db.stickButtonsSaved == nil, "sticky selection on")
 SlashCmdList.HALO("reset yes"); advance(1)
-check(H.StickRelease() == "keep" and cvars.GamePadStickAxisButtons == "1" and H.db.stickButtonsSaved == "0",
+check(H.StickRelease() == "keep" and cvars.GamePadStickAxisButtons == "1" and H.db.stickButtonsSaved == nil,
     "reset goes back to Keep and keeps the stick setting on")
 -- Saves from before 0.9.15 with Stick released: Nothing become Keep.
 H.db.options.padRelease = "none"
@@ -1203,7 +1296,7 @@ do
     check(cvars.GamePadStickAxisButtons == "0", "an option change while the flyout is open leaves it off")
     fly:Set(false); advance(1)
     check(cvars.GamePadStickAxisButtons == "1", "flyout closed: stick keys back on")
-    check(H.db.stickButtonsSaved == "0", "the player's own value is still remembered")
+    check(H.db.stickButtonsSaved == nil, "the player's own value is not recorded (nothing restores it)")
     combat = true; fly:Set(true)
     check(cvars.GamePadStickAxisButtons == "1", "in combat the setting is left alone")
     fly:Set(false); combat = false
