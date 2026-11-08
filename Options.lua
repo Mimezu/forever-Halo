@@ -758,6 +758,85 @@ local function BuildRings(page)
     Tooltip(add, "Add a slice", "Drop a spell, item, mount, toy, pet or macro here, or click for emotes, markers, automatic lists, other rings and custom macros.")
 
     local slotButtons = {}
+    -- Drag a slice to a new place on the ring. A lifted copy of its icon follows the cursor
+    -- and the other slices slide apart to show where it will land; its old spot stays faint.
+    -- Let go outside the ring to cancel.
+    local layout = { n = 0, sr = 0 }
+    local drag = {}
+    local ghost
+    local function Place(b, pos, instant)
+        local a = (pos - 1) * 2 * math.pi / math.max(layout.n, 1)
+        b.tx, b.ty = layout.sr * math.sin(a), layout.sr * math.cos(a)
+        if instant or not b.px then b.px, b.py = b.tx, b.ty end
+        b:ClearAllPoints()
+        b:SetPoint("CENTER", stage, "CENTER", b.px, b.py)
+    end
+    local function Preview(instant)
+        local from, to = drag.from, drag.to or drag.from
+        for i = 1, layout.n do
+            local pos = i
+            if i == from then
+                pos = to
+            else
+                if i > from then pos = pos - 1 end
+                if pos >= to then pos = pos + 1 end
+            end
+            Place(slotButtons[i], pos, instant)
+            slotButtons[i]:SetAlpha(i == from and 0.3 or 1)
+        end
+    end
+    -- The place under the cursor, or nil when the cursor is off the ring.
+    local function DragTarget()
+        if not canvas:IsMouseOver() then return nil end
+        local x, y = GetCursorPosition()
+        local scale = stage:GetEffectiveScale()
+        local cx, cy = stage:GetCenter()
+        local dx, dy = x / scale - cx, y / scale - cy
+        if dx * dx + dy * dy < (layout.sr * 0.4) ^ 2 then return drag.to end
+        local step = 2 * math.pi / layout.n
+        return math.floor((math.atan2(dx, dy) % (2 * math.pi)) / step + 0.5) % layout.n + 1
+    end
+    local function EndDrag(commit)
+        if not drag.from then return end
+        local from, to = drag.from, drag.to
+        drag.from, drag.to = nil, nil
+        ghost:Hide()
+        local ring = CurrentRing()
+        if commit and to and to ~= from and ring and ring.slices[from] and ring.slices[to] then
+            local selected = selectedSlice and ring.slices[selectedSlice]
+            table.insert(ring.slices, to, table.remove(ring.slices, from))
+            for i, s in ipairs(ring.slices) do if s == selected then selectedSlice = i end end
+            PlaySound(SOUNDKIT.U_CHAT_SCROLL_BUTTON)
+            H.Changed("slices")
+        end
+        pageRefresh[1]()
+    end
+    local function Ghost()
+        if ghost then return ghost end
+        ghost = CreateFrame("Button", nil, UIParent)
+        ghost:SetFrameStrata("TOOLTIP")
+        ghost:EnableMouse(false)
+        H.RingSkins.BuildSlotKit(ghost)
+        ghost:Hide()
+        ghost:SetScript("OnUpdate", function(self, elapsed)
+            local x, y = GetCursorPosition()
+            local scale = self:GetEffectiveScale()
+            self:ClearAllPoints()
+            self:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x / scale, y / scale)
+            local to = DragTarget()
+            if to ~= drag.to then drag.to = to; Preview() end
+            local k = math.min(1, elapsed * 14)
+            for i = 1, layout.n do
+                local b = slotButtons[i]
+                b.px, b.py = b.px + (b.tx - b.px) * k, b.py + (b.ty - b.py) * k
+                b:ClearAllPoints()
+                b:SetPoint("CENTER", stage, "CENTER", b.px, b.py)
+            end
+        end)
+        return ghost
+    end
+    stage:SetScript("OnHide", function() EndDrag(false) end)
+
     local function SlotButton(i)
         if slotButtons[i] then return slotButtons[i] end
         local b = CreateFrame("Button", nil, stage)
@@ -782,7 +861,23 @@ local function BuildRings(page)
             pageRefresh[1]()
         end)
         b:SetScript("OnReceiveDrag", function(self) DropCursor(self.index) end)
+        b:SetScript("OnDragStart", function(self)
+            local ring = CurrentRing()
+            if GetCursorInfo() or not (ring and ring.slices[self.index]) or layout.n < 2 then return end
+            GameTooltip:Hide()
+            drag.from, drag.to = self.index, self.index
+            local g = Ghost()
+            H.RingSkins.ApplySlot(g, layout.skin)
+            g.icon:SetTexture(self.icon:GetTexture())
+            g:SetScale(stage:GetEffectiveScale() / UIParent:GetEffectiveScale() * 1.15)
+            g:SetAlpha(0.95)
+            g:Show()
+            Preview(true)
+            PlaySound(SOUNDKIT.U_CHAT_SCROLL_BUTTON)
+        end)
+        b:SetScript("OnDragStop", function() EndDrag(true) end)
         b:SetScript("OnEnter", function(self)
+            if drag.from then return end
             local ring = CurrentRing()
             local s = ring and ring.slices[self.index]
             if not s then return end
@@ -791,7 +886,7 @@ local function BuildRings(page)
             if s.kind ~= "auto" and ring.hideMissing and not H.SliceKnown(s) then
                 GameTooltip:AddLine("Hidden right now: not learned or not in your bags.", 1, 0.5, 0.25, true)
             end
-            GameTooltip:AddLine("Click: select   Right-click: remove", 0.6, 0.6, 0.6)
+            GameTooltip:AddLine("Drag: move   Click: select   Right-click: remove", 0.6, 0.6, 0.6)
             GameTooltip:Show()
         end)
         b:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -840,7 +935,7 @@ local function BuildRings(page)
         end
     end)
     local dNote = Note(detail, "", 0, -140, DW)
-    local noSelection = Note(editor, "Select a slice to move or remove it.", DX, -90, DW)
+    local noSelection = Note(editor, "Drag a slice to move it. Click one to select or remove it.", DX, -90, DW)
 
     -- Ring-level controls.
     local hide = Check(editor, "Hide what you can't use now", 0, -(84 + CANVAS + 4),
@@ -1098,6 +1193,11 @@ local function BuildRings(page)
         local fit = math.min(1, (CANVAS - 4) / (diameter * size))
         stage:SetScale(size * fit)
         fitNote:SetText(fit < 0.995 and ("Shown at " .. math.floor(fit * 100 + 0.5) .. "% of real size") or "")
+        if drag.from and (n ~= layout.n or not ring.slices[drag.from]) then
+            drag.from, drag.to = nil, nil
+            ghost:Hide()
+        end
+        layout.n, layout.sr, layout.skin = n, H.RingSkins.SlotRadius(skin, radius), skin
         for i = 1, math.max(n, #slotButtons) do
             local b = SlotButton(i)
             local s = ring.slices[i]
@@ -1106,10 +1206,8 @@ local function BuildRings(page)
                 H.RingSkins.ApplySlot(b, skin)
                 local _, icon = H.SliceInfo(s)
                 b.icon:SetTexture(icon)
-                local a = (i - 1) * 2 * math.pi / math.max(n, 1)
-                b:ClearAllPoints()
-                local sr = H.RingSkins.SlotRadius(skin, radius)
-                b:SetPoint("CENTER", stage, "CENTER", sr * math.sin(a), sr * math.cos(a))
+                Place(b, i, true)
+                b:SetAlpha(1)
                 b.over:SetShown(i == selectedSlice)
                 b.badge:SetText(s.kind == "auto" and "A" or (s.kind == "ring" and ">" or ""))
                 local hidden = s.kind ~= "auto" and ring.hideMissing and not H.SliceKnown(s)
@@ -1122,6 +1220,7 @@ local function BuildRings(page)
             end
         end
         add:SetShown(n < H.MAX_SLICES)
+        if drag.from then Preview(true) end
 
         local s = selectedSlice and ring.slices[selectedSlice]
         detail:SetShown(s ~= nil)

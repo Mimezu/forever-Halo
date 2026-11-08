@@ -65,7 +65,7 @@ with the **Style** button in the ring editor.
 - Drag spells, items, mounts, toys, battle pets, macros or equipment sets onto the **+** in the
   middle of the ring. Dropping onto a slice replaces it.
 - Click **+** for emotes, target markers, other rings (nested), custom macros, and automatic lists.
-- Click a slice to move it (Earlier/Later) or remove it. Right-click a slice removes it.
+- Drag a slice to move it around the ring (let go outside the ring to cancel). Click a slice to select it (Earlier/Later, Remove). Right-click a slice removes it.
 - **Hide what you can't use now** leaves out unlearned spells and items not in your bags.
 - **Only this character** keeps a ring (and its keys) to the current character.
 - **Folders**: the list has a folder for this character, one for rings everyone uses, and one for
