@@ -16,7 +16,10 @@ local PAGES = {
 
 local frame, skin
 local userClose, quietShow = false, false -- window: closed by the player / re-shown silently
+-- pageFrames and pageRefresh belong to the layout on show (A or B, see SetLayout); every
+-- closure that calls pageRefresh[1]() refreshes whichever layout is up.
 local pageFrames, tabs, pageRefresh = {}, {}, {}
+local layouts = {}
 local styleHint   -- the Styles tab's hint, on the window's footer line
 local selectedRing, selectedSlice
 
@@ -600,26 +603,123 @@ function H.RingGroups()
 end
 
 -- Rings page ---------------------------------------------------------------------------------------
+-- The parts both layouts share (ring list, ring canvas, banner, macro editor, actions) are built
+-- here; BuildRings arranges them as layout A, H.BuildRingsB (OptionsModern.lua) as layout B.
 local LIST_W, ROW_H = 196, 40
+local FOLDER_H = 26
 
-local function BuildRings(page)
-    local W_, Hh = page:GetSize()
-    -- Ring list.
-    local listCard = Card(page, nil, 0, 0, LIST_W, Hh - 30)
+local function NewRing()
+    local ring = H.NewRing("Ring " .. #H.db.rings + 1)
+    selectedRing, selectedSlice = ring.id, nil
+    pageRefresh[1]()
+end
+
+local function CopyCurrent(owner, where)
+    local ring = CurrentRing()
+    if not ring then return end
+    local copy, notes = H.CopyRing(ring.id, owner)
+    if not copy then return end
+    selectedRing, selectedSlice = copy.id, nil
+    H.db.window.folders[owner and "mine" or "all"] = false   -- show it: open its folder
+    H.Print(('Copied "%s" %s as "%s".'):format(ring.name, where, copy.name))
+    for _, note in ipairs(notes) do H.Print(note) end
+    pageRefresh[1]()
+end
+
+local function DeleteCurrent()
+    H.DeleteRing(selectedRing)
+    selectedRing, selectedSlice = nil, nil
+    pageRefresh[1]()
+end
+
+local function MoveSlice(delta)
+    local ring = CurrentRing()
+    local i = selectedSlice
+    if not (ring and i and ring.slices[i] and ring.slices[i + delta]) then return end
+    ring.slices[i], ring.slices[i + delta] = ring.slices[i + delta], ring.slices[i]
+    selectedSlice = i + delta
+    H.Changed("slices")
+end
+
+local function RemoveSlice(i)
+    local ring = CurrentRing()
+    if ring and i and ring.slices[i] then
+        table.remove(ring.slices, i)
+        selectedSlice = nil
+        H.Changed("slices")
+    end
+end
+
+-- Ring macro: /click the ring from a macro, so it can sit on any slot of Blizzard's
+-- gamepad bars (R1 + D-pad down etc.). Blizzard handles the combination; each button
+-- alone keeps its normal action. A macro opens the ring like tap mode.
+local function MakeRingMacro()
+    local ring = CurrentRing()
+    if not ring then return end
+    if InCombatLockdown() then UIErrorsFrame:AddMessage("Make the macro outside combat.", 1, 0.82, 0); return end
+    local name = ("Halo " .. ring.name):sub(1, 16)
+    local body = "/click HaloButton t" .. ring.id .. " LeftButton true"
+    local icon = H.RingIcon(ring, true)
+    if type(icon) == "string" then icon = GetFileIDFromPath and GetFileIDFromPath(icon) or 134400 end
+    -- Found by what it does, not by name: names are cut to 16 letters, so two rings
+    -- starting with the same words would share one macro.
+    local index = FindRingMacro(body)
+    if index then
+        EditMacro(index, name, icon or 134400, body)
+    else
+        local perChar = ring.owner ~= nil
+        local ok, created = pcall(CreateMacro, name, icon or 134400, body, perChar)
+        if not ok or not created then
+            UIErrorsFrame:AddMessage("Could not make the macro (the macro list may be full).", 1, 0.3, 0.3)
+            return
+        end
+        index = created
+    end
+    PickupMacro(index)
+    H.Print(("Macro \"%s\" is on your cursor: put it on a gamepad bar slot (for example R1 + D-pad down)."):format(name))
+end
+local MACRO_TIP = "Makes a macro that opens this ring and puts it on your cursor. Place it on any slot of your gamepad bars, such as a shoulder + D-pad combination: that combination opens the ring and each button alone still does its normal action. Opened this way, the ring works like tap: press again to use the pointed slice, or L1/R1/L2/R2/A."
+
+-- What the ring's keys replace or clash with, one note per key.
+local function KeyNotes(ring)
+    local notes = {}
+    local n1, n2 = BindingOwnerText(ring.key), BindingOwnerText(ring.padKey)
+    if n1 then notes[#notes + 1] = KeyText(ring.key) .. ": " .. n1 end
+    if n2 then notes[#notes + 1] = KeyText(ring.padKey) .. ": " .. n2 end
+    if not ring.key and not ring.padKey then notes[#notes + 1] = "Give the ring a key to open it." end
+    return table.concat(notes, "  ")
+end
+
+local function SliceNote(s)
+    if s.kind == "auto" then
+        local a = H.AUTO_BY_ID[s.source]
+        return (a and a[4] or "") .. " Fills in by itself."
+    elseif s.kind == "ring" then
+        return "Opens that ring in place. Right-click or the gamepad cancel button goes back."
+    elseif s.kind == "spell" then
+        return "Casts the highest rank you know."
+    end
+    return ""
+end
+
+-- The ring list: folders of rings. o.tidy (layout B): a gold bar marks the selected ring and
+-- the scroll bar shows only when the list is longer than the card.
+local function RingList(page, x, y, w, h, o)
+    o = o or {}
+    local listCard = Card(page, nil, x, y, w, h)
     local scroll = CreateFrame("ScrollFrame", nil, listCard, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", 4, -4)
     scroll:SetPoint("BOTTOMRIGHT", -26, 4)
     local child = CreateFrame("Frame", nil, scroll)
-    child:SetSize(LIST_W - 30, 10)
+    child:SetSize(w - 30, 10)
     scroll:SetScrollChild(child)
     local rows = {}
-    local FOLDER_H = 26
     local function Row(i)
         if rows[i] then return rows[i] end
         local row = CreateFrame("Button", nil, child)
-        row:SetSize(LIST_W - 30, ROW_H - 2)
+        row:SetSize(w - 30, ROW_H - 2)
         row.icon = RoundIcon(row, 30)
-        row.icon:SetPoint("LEFT", 4, 0)
+        row.icon:SetPoint("LEFT", o.tidy and 8 or 4, 0)
         row.name = row:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 8, -1)
         row.name:SetPoint("RIGHT", -4, 0)
@@ -633,6 +733,12 @@ local function BuildRings(page)
         row.selected = row:CreateTexture(nil, "BACKGROUND")
         row.selected:SetAllPoints()
         row.selected:SetColorTexture(1, 0.72, 0.2, 0.18)
+        if o.tidy then
+            row.bar = row:CreateTexture(nil, "ARTWORK")
+            row.bar:SetPoint("TOPLEFT"); row.bar:SetPoint("BOTTOMLEFT")
+            row.bar:SetWidth(3)
+            row.bar:SetColorTexture(1, 0.82, 0, 0.9)
+        end
         local hover = row:CreateTexture(nil, "HIGHLIGHT")
         hover:SetAllPoints()
         hover:SetColorTexture(1, 0.8, 0.4, 0.08)
@@ -663,68 +769,87 @@ local function BuildRings(page)
         rows[i] = row
         return row
     end
-    local newRing = Button(page, "New ring", 0, -(Hh - 24), LIST_W, function()
-        local ring = H.NewRing("Ring " .. #H.db.rings + 1)
-        selectedRing, selectedSlice = ring.id, nil
-        pageRefresh[1]()
-    end)
 
-    -- Editor.
-    local EX = LIST_W + 14
-    local EW = W_ - EX
-    local editor = CreateFrame("Frame", nil, page)
-    editor:SetPoint("TOPLEFT", EX, 0)
-    editor:SetSize(EW, Hh)
-    local empty = Note(page, "Make a ring with New ring.", EX + 20, -40, EW - 40)
-
-    Text(editor, "Name", 0, -4, "GameFontNormal")
-    local nameBox = EditBox(editor, 60, 0, 150, function(text)
-        local ring = CurrentRing()
-        text = strtrim(text or "")
-        if ring and text ~= "" and text ~= ring.name then ring.name = text; H.Changed("name") end
-        pageRefresh[1]()
-    end)
-    function nameBox:Reset() local ring = CurrentRing(); self:SetText(ring and ring.name or "") end
-    local mine = Check(editor, "Only this character", 218, 0,
-        function() local r = CurrentRing(); return r and r.owner ~= nil end,
-        function(on)
-            local r = CurrentRing()
-            if r then H.SetRingOwner(r, on and H.CharacterKey() or nil); H.Changed("owner") end
-        end, 140)
-    Tooltip(mine, "Only this character", "Other characters do not use this ring and its keys. They can still see it under this character's folder and copy it.")
-    local function CopyCurrent(owner, where)
-        local ring = CurrentRing()
-        if not ring then return end
-        local copy, notes = H.CopyRing(ring.id, owner)
-        if not copy then return end
-        selectedRing, selectedSlice = copy.id, nil
-        H.db.window.folders[owner and "mine" or "all"] = false   -- show it: open its folder
-        H.Print(('Copied "%s" %s as "%s".'):format(ring.name, where, copy.name))
-        for _, note in ipairs(notes) do H.Print(note) end
-        pageRefresh[1]()
+    local list = { card = listCard }
+    -- Also picks a ring when none (or a deleted one) is selected.
+    function list:Refresh()
+        local groups = H.RingGroups()
+        if selectedRing and not H.GetRing(selectedRing) then selectedRing = nil end
+        if not selectedRing then
+            for _, group in ipairs(groups) do
+                if group.rings[1] then selectedRing = group.rings[1].id; break end
+            end
+        end
+        local n, top = 0, 0
+        for _, group in ipairs(groups) do
+            -- This character's and everyone's folders start open, other characters' closed.
+            local closed = H.db.window.folders[group.key]
+            if closed == nil then closed = group.foreign == true end
+            n = n + 1
+            local head = Row(n)
+            head.folderKey, head.folderClosed, head.ringID = group.key, closed, nil
+            head:SetHeight(FOLDER_H - 2)
+            head:ClearAllPoints(); head:SetPoint("TOPLEFT", 0, -top)
+            top = top + FOLDER_H
+            head.icon:Hide(); head.name:Hide(); head.key:Hide(); head.selected:Hide()
+            if o.tidy then head.bar:Hide() end
+            head.stripe:Show(); head.arrow:Show(); head.folder:Show(); head.count:Show()
+            head.arrow:SetRotation(closed and 0 or -math.pi / 2)
+            head.folder:SetText(group.title)
+            local color = group.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[group.class]
+            if color then head.folder:SetTextColor(color.r, color.g, color.b) else head.folder:SetTextColor(1, 0.82, 0) end
+            head.count:SetText(#group.rings > 0 and tostring(#group.rings) or "")
+            head:Show()
+            if not closed then
+                for _, ring in ipairs(group.rings) do
+                    n = n + 1
+                    local row = Row(n)
+                    row.folderKey, row.ringID = nil, ring.id
+                    row:SetHeight(ROW_H - 2)
+                    row:ClearAllPoints(); row:SetPoint("TOPLEFT", 0, -top)
+                    top = top + ROW_H
+                    row.stripe:Hide(); row.arrow:Hide(); row.folder:Hide(); row.count:Hide()
+                    row.icon:Show(); row.name:Show(); row.key:Show()
+                    row.icon:SetTexture(H.RingIcon(ring))
+                    row.icon:SetAlpha(group.foreign and 0.55 or 1)
+                    row.name:SetText(ring.name)
+                    if group.foreign then row.name:SetTextColor(0.7, 0.7, 0.7) else row.name:SetTextColor(1, 1, 1) end
+                    local keysText = {}
+                    if ring.key then keysText[#keysText + 1] = KeyText(ring.key) end
+                    if ring.padKey then keysText[#keysText + 1] = KeyText(ring.padKey) end
+                    row.key:SetText(#keysText > 0 and table.concat(keysText, ", ") or "No key")
+                    row.selected:SetShown(ring.id == selectedRing)
+                    if o.tidy then row.bar:SetShown(ring.id == selectedRing) end
+                    row:Show()
+                end
+            end
+        end
+        for i = n + 1, #rows do rows[i]:Hide() end
+        child:SetHeight(math.max(10, top))
+        if o.tidy then
+            -- No scroll bar while everything fits: the rows take its room.
+            local fits = top <= h - 8
+            local bar = scroll.ScrollBar
+            if type(bar) == "table" then bar:SetShown(not fits) end
+            if fits then scroll:SetVerticalScroll(0) end
+            scroll:SetPoint("BOTTOMRIGHT", fits and -4 or -26, 4)
+            local rowW = fits and w - 8 or w - 30
+            child:SetWidth(rowW)
+            for i = 1, n do rows[i]:SetWidth(rowW) end
+        end
     end
-    Tooltip(Button(editor, "Duplicate", 410, 0, EW - 410, function()
-        local ring = CurrentRing()
-        if ring then CopyCurrent(ring.owner, "here") end
-    end, 24), "Duplicate", "Makes a copy of this ring in the same folder. The copy keeps its key unless something already uses it.")
+    return list
+end
 
-    Text(editor, "Key", 0, -38, "GameFontNormal")
-    local keyButton = KeyCapture(editor, 60, -34, 130, "key")
-    Tooltip(keyButton, "Key", "Click, then press a key or mouse button (with Shift, Ctrl or Alt if you like). Backspace clears it.")
-    Text(editor, "Gamepad", 204, -38, "GameFontNormal")
-    local padButton = KeyCapture(editor, 270, -34, 130, "padKey")
-    Tooltip(padButton, "Gamepad button", "Click, then press a gamepad button. Backspace clears it. For combinations like R1 + D-pad down, use Make macro and put the macro on that slot of your gamepad bars.")
-    local keyNote = Note(editor, "", 0, -62, EW)
-    local styleButton = Button(editor, "Style", 410, -34, EW - 410, StyleMenu, 24)
-    Tooltip(styleButton, "Style", "How this ring looks. Default follows the Styles tab.")
-
-    -- The ring drawn as a ring.
-    local CANVAS = 250
-    local canvas = CreateFrame("Frame", nil, editor)
-    canvas:SetPoint("TOPLEFT", 0, -84)
-    canvas:SetSize(CANVAS + 20, CANVAS)
-    -- The stage draws the ring at its real size: same radius rule, Spacing, Size option,
-    -- 36px icons and backdrop as Ring.lua. Scaled down evenly only when it would not fit.
+-- The ring drawn as a ring, at its real size: same radius rule, Spacing, Size option, icons and
+-- backdrop as Ring.lua. Scaled down evenly only when it would not fit. Holds the + button,
+-- the slices (click, right-click, drag to move) and drops from the cursor.
+-- o.notesBelow (layout B): the "Shown at" note sits under the ring instead of above it.
+local function RingCanvas(parent, x, y, w, h, o)
+    o = o or {}
+    local canvas = CreateFrame("Frame", nil, parent)
+    canvas:SetPoint("TOPLEFT", x, y)
+    canvas:SetSize(w, h)
     local stage = CreateFrame("Frame", nil, canvas)
     stage:SetPoint("CENTER")
     stage:SetSize(1, 1)
@@ -733,7 +858,8 @@ local function BuildRings(page)
     halo:SetTexture(ROUND_MASK)
     halo:SetVertexColor(0, 0, 0, 0.25)
     local fitNote = canvas:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    fitNote:SetPoint("TOPLEFT", 0, 0)
+    if o.notesBelow then fitNote:SetPoint("TOPLEFT", canvas, "BOTTOMLEFT", 0, -4)
+    else fitNote:SetPoint("TOPLEFT", 0, 0) end
     fitNote:SetJustifyH("LEFT")
 
     local add = CreateFrame("Button", nil, canvas)
@@ -788,10 +914,10 @@ local function BuildRings(page)
     -- The place under the cursor, or nil when the cursor is off the ring.
     local function DragTarget()
         if not canvas:IsMouseOver() then return nil end
-        local x, y = GetCursorPosition()
+        local cx, cy = GetCursorPosition()
         local scale = stage:GetEffectiveScale()
-        local cx, cy = stage:GetCenter()
-        local dx, dy = x / scale - cx, y / scale - cy
+        local sx, sy = stage:GetCenter()
+        local dx, dy = cx / scale - sx, cy / scale - sy
         if dx * dx + dy * dy < (layout.sr * 0.4) ^ 2 then return drag.to end
         local step = 2 * math.pi / layout.n
         return math.floor((math.atan2(dx, dy) % (2 * math.pi)) / step + 0.5) % layout.n + 1
@@ -819,10 +945,10 @@ local function BuildRings(page)
         H.RingSkins.BuildSlotKit(ghost)
         ghost:Hide()
         ghost:SetScript("OnUpdate", function(self, elapsed)
-            local x, y = GetCursorPosition()
+            local cx, cy = GetCursorPosition()
             local scale = self:GetEffectiveScale()
             self:ClearAllPoints()
-            self:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x / scale, y / scale)
+            self:SetPoint("CENTER", UIParent, "BOTTOMLEFT", cx / scale, cy / scale)
             local to = DragTarget()
             if to ~= drag.to then drag.to = to; Preview() end
             local k = math.min(1, elapsed * 14)
@@ -851,11 +977,7 @@ local function BuildRings(page)
         b:RegisterForDrag("LeftButton")
         b:SetScript("OnClick", function(self, mouse)
             if DropCursor(self.index) then return end
-            if mouse == "RightButton" then
-                local ring = CurrentRing()
-                if ring then table.remove(ring.slices, self.index); selectedSlice = nil; H.Changed("slices") end
-                return
-            end
+            if mouse == "RightButton" then RemoveSlice(self.index); return end
             selectedSlice = self.index
             PlaySound(SOUNDKIT.U_CHAT_SCROLL_BUTTON)
             pageRefresh[1]()
@@ -894,283 +1016,10 @@ local function BuildRings(page)
         return b
     end
 
-    -- Selected slice details.
-    local DX = CANVAS + 36
-    local DW = EW - DX
-    local detail = CreateFrame("Frame", nil, editor)
-    detail:SetPoint("TOPLEFT", DX, -84)
-    detail:SetSize(DW, CANVAS)
-    local dIcon = RoundIcon(detail, 40)
-    dIcon:SetPoint("TOPLEFT", 0, -4)
-    local dName = detail:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    dName:SetPoint("TOPLEFT", dIcon, "TOPRIGHT", 8, -3)
-    dName:SetPoint("RIGHT", 0, 0)
-    dName:SetJustifyH("LEFT")
-    dName:SetWordWrap(false)
-    local dKind = detail:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    dKind:SetPoint("TOPLEFT", dName, "BOTTOMLEFT", 0, -3)
-    local function Move(delta)
-        local ring = CurrentRing()
-        local i = selectedSlice
-        if not (ring and i and ring.slices[i] and ring.slices[i + delta]) then return end
-        ring.slices[i], ring.slices[i + delta] = ring.slices[i + delta], ring.slices[i]
-        selectedSlice = i + delta
-        H.Changed("slices")
-    end
-    local back = Button(detail, "Earlier", 0, -56, (DW - 4) / 2, function() Move(-1) end)
-    local fwd = Button(detail, "Later", (DW + 4) / 2, -56, (DW - 4) / 2, function() Move(1) end)
-    Tooltip(back, "Earlier", "Moves the slice one place anticlockwise. Slice 1 is at the top.")
-    Tooltip(fwd, "Later", "Moves the slice one place clockwise.")
-    local edit = Button(detail, "Edit macro", 0, -82, DW, function()
-        local ring = CurrentRing()
-        local s = ring and selectedSlice and ring.slices[selectedSlice]
-        if s and s.kind == "text" then OpenMacroEditor(s) end
-    end)
-    local remove = Button(detail, "Remove", 0, -108, DW, function()
-        local ring = CurrentRing()
-        if ring and selectedSlice and ring.slices[selectedSlice] then
-            table.remove(ring.slices, selectedSlice)
-            selectedSlice = nil
-            H.Changed("slices")
-        end
-    end)
-    local dNote = Note(detail, "", 0, -140, DW)
-    local noSelection = Note(editor, "Drag a slice to move it. Click one to select or remove it.", DX, -90, DW)
-
-    -- Ring-level controls.
-    local hide = Check(editor, "Hide what you can't use now", 0, -(84 + CANVAS + 4),
-        function() local r = CurrentRing(); return r and r.hideMissing end,
-        function(on) local r = CurrentRing(); if r then r.hideMissing = on; H.Changed("hide") end end, 220)
-    Tooltip(hide, "Hide what you can't use now", "Leaves out spells you have not learned and items that are not in your bags. The ring updates outside combat.")
-    local tips = Check(editor, "Show tooltips", 0, -(84 + CANVAS + 28),
-        function() local r = CurrentRing(); return r and r.tooltips end,
-        function(on) local r = CurrentRing(); if r then r.tooltips = on or nil; H.Changed("tooltips") end end, 220)
-    Tooltip(tips, "Show tooltips", "Shows the game tooltip of the slice you point at, beside the ring.")
-    local liveNote = Note(editor, "", 250, -(84 + CANVAS + 10), 180)
-    Text(editor, "Spacing", 250, -(84 + CANVAS + 32), "GameFontHighlight")
-    local spacing = Stepper(editor, 316, -(84 + CANVAS + 28), 56, function(delta)
-        local r = CurrentRing()
-        if not r then return end
-        local v = math.floor(((tonumber(r.spread) or 1) + delta * 0.1) * 10 + 0.5) / 10
-        v = math.max(H.SPREAD_MIN, math.min(H.SPREAD_MAX, v))
-        r.spread = v ~= 1 and v or nil
-        H.Changed("spacing")
-    end)
-    local spacingHelp = CreateFrame("Frame", nil, editor)
-    spacingHelp:SetPoint("TOPLEFT", 250, -(84 + CANVAS + 28))
-    spacingHelp:SetSize(62, 22)
-    Tooltip(spacingHelp, "Spacing", "Moves the slices further apart or closer together. Icons keep their size.")
-    -- Ring macro: /click the ring from a macro, so it can sit on any slot of Blizzard's
-    -- gamepad bars (R1 + D-pad down etc.). Blizzard handles the combination; each button
-    -- alone keeps its normal action. A macro opens the ring like tap mode.
-    local macroButton = Button(editor, "Macro", EW - 78, -(84 + CANVAS + 28), 78, function()
-        local ring = CurrentRing()
-        if not ring then return end
-        if InCombatLockdown() then UIErrorsFrame:AddMessage("Make the macro outside combat.", 1, 0.82, 0); return end
-        local name = ("Halo " .. ring.name):sub(1, 16)
-        local body = "/click HaloButton t" .. ring.id .. " LeftButton true"
-        local icon = H.RingIcon(ring, true)
-        if type(icon) == "string" then icon = GetFileIDFromPath and GetFileIDFromPath(icon) or 134400 end
-        -- Found by what it does, not by name: names are cut to 16 letters, so two rings
-        -- starting with the same words would share one macro.
-        local index = FindRingMacro(body)
-        if index then
-            EditMacro(index, name, icon or 134400, body)
-        else
-            local perChar = ring.owner ~= nil
-            local ok, created = pcall(CreateMacro, name, icon or 134400, body, perChar)
-            if not ok or not created then
-                UIErrorsFrame:AddMessage("Could not make the macro (the macro list may be full).", 1, 0.3, 0.3)
-                return
-            end
-            index = created
-        end
-        PickupMacro(index)
-        H.Print(("Macro \"%s\" is on your cursor: put it on a gamepad bar slot (for example R1 + D-pad down)."):format(name))
-    end)
-    Tooltip(macroButton, "Macro", "Makes a macro that opens this ring and puts it on your cursor. Place it on any slot of your gamepad bars, such as a shoulder + D-pad combination: that combination opens the ring and each button alone still does its normal action. Opened this way, the ring works like tap: press again to use the pointed slice, or L1/R1/L2/R2/A.")
-    local deleteArmed = false
-    local delete = Button(editor, "Delete ring", EW - 120, -(84 + CANVAS + 4), 120, nil)
-    delete:SetScript("OnClick", function(self)
-        if not deleteArmed then
-            deleteArmed = true
-            self:SetText("Click to confirm")
-            C_Timer.After(3, function() deleteArmed = false; if self:IsShown() then self:SetText("Delete ring") end end)
-            return
-        end
-        deleteArmed = false
-        self:SetText("Delete ring")
-        H.DeleteRing(selectedRing)
-        selectedRing, selectedSlice = nil, nil
-        pageRefresh[1]()
-    end)
-
-    -- A ring of another character: shown dimmed and locked, with a banner to copy it here.
-    local foreignBar = CreateFrame("Frame", nil, editor)
-    foreignBar:SetAllPoints(editor)
-    foreignBar:SetFrameLevel(editor:GetFrameLevel() + 30)
-    foreignBar:EnableMouse(true)
-    foreignBar:Hide()
-    local dim = foreignBar:CreateTexture(nil, "BACKGROUND")
-    dim:SetAllPoints()
-    dim:SetColorTexture(0.05, 0.03, 0.02, 0.45)
-    local strip = foreignBar:CreateTexture(nil, "BORDER")
-    strip:SetPoint("TOPLEFT"); strip:SetPoint("TOPRIGHT"); strip:SetHeight(80)
-    strip:SetColorTexture(0.07, 0.05, 0.03, 0.97)
-    local foreignText = Text(foreignBar, "", 10, -8, "GameFontHighlight", EW - 20)
-    Tooltip(Button(foreignBar, "Copy to this character", 10, -46, 178, function()
-        CopyCurrent(H.CharacterKey(), "to this character")
-    end, 24), "Copy to this character", "Makes your own copy, marked \"Only this character\". It keeps its key and gamepad button unless something here already uses them.")
-    Tooltip(Button(foreignBar, "Copy for everyone", 194, -46, 150, function()
-        CopyCurrent(nil, "for every character")
-    end, 24), "Copy for everyone", "Makes a copy that every character sees, for rings that are not class-specific.")
-    local foreignArmed = false
-    local foreignDelete = Button(foreignBar, "Delete ring", EW - 110, -46, 100, nil, 24)
-    foreignDelete:SetScript("OnClick", function(self)
-        if not foreignArmed then
-            foreignArmed = true
-            self:SetText("Click to confirm")
-            C_Timer.After(3, function() foreignArmed = false; if self:IsShown() then self:SetText("Delete ring") end end)
-            return
-        end
-        foreignArmed = false
-        self:SetText("Delete ring")
-        H.DeleteRing(selectedRing)
-        selectedRing, selectedSlice = nil, nil
-        pageRefresh[1]()
-    end)
-    function foreignBar:Set(ring)
-        local shown = ring ~= nil and not H.RingActiveHere(ring)
-        self:SetShown(shown)
-        if shown then
-            local class = ring.ownerClass and LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[ring.ownerClass]
-            foreignText:SetText(("Belongs to %s%s. It does not show up on this character."):format(
-                H.RingOwnerName(ring) or "another character", class and (" (" .. class .. ")") or ""))
-        end
-    end
-
-    -- Custom macro editor (over the canvas).
-    macroEditor = CreateFrame("Frame", nil, editor)
-    macroEditor:SetPoint("TOPLEFT", 0, -84)
-    macroEditor:SetSize(EW, CANVAS + 30)
-    macroEditor:SetFrameLevel(editor:GetFrameLevel() + 20)
-    macroEditor:EnableMouse(true)
-    macroEditor:Hide()
-    local mbg = macroEditor:CreateTexture(nil, "BACKGROUND")
-    mbg:SetAllPoints()
-    mbg:SetColorTexture(0.07, 0.05, 0.03, 0.97)
-    Text(macroEditor, "Custom macro", 10, -8, "GameFontNormal")
-    Text(macroEditor, "Name", 10, -36, "GameFontHighlightSmall")
-    macroEditor.labelBox = EditBox(macroEditor, 60, -32, 200, function() end)
-    Text(macroEditor, "Macro text", 10, -64, "GameFontHighlightSmall")
-    local mscroll = CreateFrame("ScrollFrame", nil, macroEditor, "UIPanelScrollFrameTemplate")
-    mscroll:SetPoint("TOPLEFT", 12, -82)
-    mscroll:SetPoint("BOTTOMRIGHT", -30, 40)
-    local mtext = CreateFrame("EditBox", nil, mscroll)
-    mtext:SetMultiLine(true)
-    mtext:SetAutoFocus(false)
-    mtext:SetFontObject("ChatFontNormal")
-    mtext:SetWidth(EW - 50)
-    mtext:SetMaxLetters(1023)
-    mtext:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    mscroll:SetScrollChild(mtext)
-    local mbox = macroEditor:CreateTexture(nil, "BORDER")
-    mbox:SetPoint("TOPLEFT", mscroll, -4, 4); mbox:SetPoint("BOTTOMRIGHT", mscroll, 4, -4)
-    mbox:SetColorTexture(0, 0, 0, 0.5)
-    macroEditor.textBox = mtext
-    Button(macroEditor, "Save", EW - 200, -(CANVAS + 2), 90, function()
-        local text = macroEditor.textBox:GetText() or ""
-        local labelText = strtrim(macroEditor.labelBox:GetText() or "")
-        if strtrim(text) == "" then macroEditor:Hide(); return end
-        if macroEditor.slice then
-            macroEditor.slice.text, macroEditor.slice.label = text, labelText
-            H.Changed("slices")
-        else
-            AddSlice({ kind = "text", text = text, label = labelText })
-        end
-        macroEditor:Hide()
-    end)
-    Button(macroEditor, "Cancel", EW - 104, -(CANVAS + 2), 90, function() macroEditor:Hide() end)
-
-    local Groups = H.RingGroups
-
-    pageRefresh[1] = function()
-        local groups = Groups()
-        if selectedRing and not H.GetRing(selectedRing) then selectedRing = nil end
-        if not selectedRing then
-            for _, group in ipairs(groups) do
-                if group.rings[1] then selectedRing = group.rings[1].id; break end
-            end
-        end
-        local n, y = 0, 0
-        for _, group in ipairs(groups) do
-            -- This character's and everyone's folders start open, other characters' closed.
-            local closed = H.db.window.folders[group.key]
-            if closed == nil then closed = group.foreign == true end
-            n = n + 1
-            local head = Row(n)
-            head.folderKey, head.folderClosed, head.ringID = group.key, closed, nil
-            head:SetHeight(FOLDER_H - 2)
-            head:ClearAllPoints(); head:SetPoint("TOPLEFT", 0, -y)
-            y = y + FOLDER_H
-            head.icon:Hide(); head.name:Hide(); head.key:Hide(); head.selected:Hide()
-            head.stripe:Show(); head.arrow:Show(); head.folder:Show(); head.count:Show()
-            head.arrow:SetRotation(closed and 0 or -math.pi / 2)
-            head.folder:SetText(group.title)
-            local color = group.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[group.class]
-            if color then head.folder:SetTextColor(color.r, color.g, color.b) else head.folder:SetTextColor(1, 0.82, 0) end
-            head.count:SetText(#group.rings > 0 and tostring(#group.rings) or "")
-            head:Show()
-            if not closed then
-                for _, ring in ipairs(group.rings) do
-                    n = n + 1
-                    local row = Row(n)
-                    row.folderKey, row.ringID = nil, ring.id
-                    row:SetHeight(ROW_H - 2)
-                    row:ClearAllPoints(); row:SetPoint("TOPLEFT", 0, -y)
-                    y = y + ROW_H
-                    row.stripe:Hide(); row.arrow:Hide(); row.folder:Hide(); row.count:Hide()
-                    row.icon:Show(); row.name:Show(); row.key:Show()
-                    row.icon:SetTexture(H.RingIcon(ring))
-                    row.icon:SetAlpha(group.foreign and 0.55 or 1)
-                    row.name:SetText(ring.name)
-                    if group.foreign then row.name:SetTextColor(0.7, 0.7, 0.7) else row.name:SetTextColor(1, 1, 1) end
-                    local keysText = {}
-                    if ring.key then keysText[#keysText + 1] = KeyText(ring.key) end
-                    if ring.padKey then keysText[#keysText + 1] = KeyText(ring.padKey) end
-                    row.key:SetText(#keysText > 0 and table.concat(keysText, ", ") or "No key")
-                    row.selected:SetShown(ring.id == selectedRing)
-                    row:Show()
-                end
-            end
-        end
-        for i = n + 1, #rows do rows[i]:Hide() end
-        child:SetHeight(math.max(10, y))
-
-        local ring = CurrentRing()
-        editor:SetShown(ring ~= nil)
-        empty:SetShown(ring == nil)
-        foreignBar:Set(ring)
-        if not ring then return end
-        if selectedSlice and not ring.slices[selectedSlice] then selectedSlice = nil end
-        if not nameBox:HasFocus() then nameBox:SetText(ring.name) end
-        mine:Update()
-        hide:Update()
-        tips:Update()
-        local spread = tonumber(ring.spread) or 1
-        spacing.value:SetText(math.floor(spread * 100 + 0.5) .. "%")
-        spacing.minus:SetEnabled(spread > H.SPREAD_MIN + 0.001)
-        spacing.plus:SetEnabled(spread < H.SPREAD_MAX - 0.001)
-        if capturing ~= keyButton then keyButton:SetText(KeyText(ring.key)) end
-        if capturing ~= padButton then padButton:SetText(KeyText(ring.padKey)) end
-        local notes = {}
-        local n1, n2 = BindingOwnerText(ring.key), BindingOwnerText(ring.padKey)
-        if n1 then notes[#notes + 1] = KeyText(ring.key) .. ": " .. n1 end
-        if n2 then notes[#notes + 1] = KeyText(ring.padKey) .. ": " .. n2 end
-        if not ring.key and not ring.padKey then notes[#notes + 1] = "Give the ring a key to open it." end
-        keyNote:SetText(table.concat(notes, "  "))
-
+    local view = { frame = canvas, fitNote = fitNote }
+    function view:Refresh(ring)
         local n = #ring.slices
+        local spread = tonumber(ring.spread) or 1
         -- Real ring size: the ring shows the live (expanded) slices, so size it by those.
         local live = H.live[ring.id]
         local count = math.max(n, live and #live or 0)
@@ -1189,8 +1038,7 @@ local function BuildRings(page)
             H.RingSkins.ShowRingArt(art, false)
             halo:SetSize(2 * radius + 50, 2 * radius + 50); halo:Show()
         end
-        styleButton:SetText("Style: " .. (ring.style and H.RingSkins.list[ring.style] and ring.style or "Default"))
-        local fit = math.min(1, (CANVAS - 4) / (diameter * size))
+        local fit = math.min(1, (math.min(w, h) - 4) / (diameter * size))
         stage:SetScale(size * fit)
         fitNote:SetText(fit < 0.995 and ("Shown at " .. math.floor(fit * 100 + 0.5) .. "% of real size") or "")
         if drag.from and (n ~= layout.n or not ring.slices[drag.from]) then
@@ -1221,7 +1069,241 @@ local function BuildRings(page)
         end
         add:SetShown(n < H.MAX_SLICES)
         if drag.from then Preview(true) end
+    end
+    return view
+end
 
+-- A ring of another character: shown dimmed and locked, with a banner to copy it here.
+local function ForeignBar(editor, EW)
+    local foreignBar = CreateFrame("Frame", nil, editor)
+    foreignBar:SetAllPoints(editor)
+    foreignBar:SetFrameLevel(editor:GetFrameLevel() + 30)
+    foreignBar:EnableMouse(true)
+    foreignBar:Hide()
+    local dim = foreignBar:CreateTexture(nil, "BACKGROUND")
+    dim:SetAllPoints()
+    dim:SetColorTexture(0.05, 0.03, 0.02, 0.45)
+    local strip = foreignBar:CreateTexture(nil, "BORDER")
+    strip:SetPoint("TOPLEFT"); strip:SetPoint("TOPRIGHT"); strip:SetHeight(80)
+    strip:SetColorTexture(0.07, 0.05, 0.03, 0.97)
+    local foreignText = Text(foreignBar, "", 10, -8, "GameFontHighlight", EW - 20)
+    Tooltip(Button(foreignBar, "Copy to this character", 10, -46, 178, function()
+        CopyCurrent(H.CharacterKey(), "to this character")
+    end, 24), "Copy to this character", "Makes your own copy, marked \"Only this character\". It keeps its key and gamepad button unless something here already uses them.")
+    Tooltip(Button(foreignBar, "Copy for everyone", 194, -46, 150, function()
+        CopyCurrent(nil, "for every character")
+    end, 24), "Copy for everyone", "Makes a copy that every character sees, for rings that are not class-specific.")
+    local foreignArmed = false
+    local foreignDelete = Button(foreignBar, "Delete ring", EW - 110, -46, 100, nil, 24)
+    foreignDelete:SetScript("OnClick", function(self)
+        if not foreignArmed then
+            foreignArmed = true
+            self:SetText("Click to confirm")
+            C_Timer.After(3, function() foreignArmed = false; if self:IsShown() then self:SetText("Delete ring") end end)
+            return
+        end
+        foreignArmed = false
+        self:SetText("Delete ring")
+        DeleteCurrent()
+    end)
+    function foreignBar:Set(ring)
+        local shown = ring ~= nil and not H.RingActiveHere(ring)
+        self:SetShown(shown)
+        if shown then
+            local class = ring.ownerClass and LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[ring.ownerClass]
+            foreignText:SetText(("Belongs to %s%s. It does not show up on this character."):format(
+                H.RingOwnerName(ring) or "another character", class and (" (" .. class .. ")") or ""))
+        end
+    end
+    return foreignBar
+end
+
+-- Custom macro editor, over the ring and what is beside it.
+local function MacroEditorPanel(editor, x, y, w, h)
+    local panel = CreateFrame("Frame", nil, editor)
+    panel:SetPoint("TOPLEFT", x, y)
+    panel:SetSize(w, h)
+    panel:SetFrameLevel(editor:GetFrameLevel() + 20)
+    panel:EnableMouse(true)
+    panel:Hide()
+    local mbg = panel:CreateTexture(nil, "BACKGROUND")
+    mbg:SetAllPoints()
+    mbg:SetColorTexture(0.07, 0.05, 0.03, 0.97)
+    Text(panel, "Custom macro", 10, -8, "GameFontNormal")
+    Text(panel, "Name", 10, -36, "GameFontHighlightSmall")
+    panel.labelBox = EditBox(panel, 60, -32, 200, function() end)
+    Text(panel, "Macro text", 10, -64, "GameFontHighlightSmall")
+    local mscroll = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
+    mscroll:SetPoint("TOPLEFT", 12, -82)
+    mscroll:SetPoint("BOTTOMRIGHT", -30, 40)
+    local mtext = CreateFrame("EditBox", nil, mscroll)
+    mtext:SetMultiLine(true)
+    mtext:SetAutoFocus(false)
+    mtext:SetFontObject("ChatFontNormal")
+    mtext:SetWidth(w - 50)
+    mtext:SetMaxLetters(1023)
+    mtext:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    mscroll:SetScrollChild(mtext)
+    local mbox = panel:CreateTexture(nil, "BORDER")
+    mbox:SetPoint("TOPLEFT", mscroll, -4, 4); mbox:SetPoint("BOTTOMRIGHT", mscroll, 4, -4)
+    mbox:SetColorTexture(0, 0, 0, 0.5)
+    panel.textBox = mtext
+    Button(panel, "Save", w - 200, -(h - 28), 90, function()
+        local text = panel.textBox:GetText() or ""
+        local labelText = strtrim(panel.labelBox:GetText() or "")
+        if strtrim(text) == "" then panel:Hide(); return end
+        if panel.slice then
+            panel.slice.text, panel.slice.label = text, labelText
+            H.Changed("slices")
+        else
+            AddSlice({ kind = "text", text = text, label = labelText })
+        end
+        panel:Hide()
+    end)
+    Button(panel, "Cancel", w - 104, -(h - 28), 90, function() panel:Hide() end)
+    return panel
+end
+
+-- Layout A.
+local function BuildRings(page)
+    local W_, Hh = page:GetSize()
+    local list = RingList(page, 0, 0, LIST_W, Hh - 30)
+    Button(page, "New ring", 0, -(Hh - 24), LIST_W, NewRing)
+
+    -- Editor.
+    local EX = LIST_W + 14
+    local EW = W_ - EX
+    local editor = CreateFrame("Frame", nil, page)
+    editor:SetPoint("TOPLEFT", EX, 0)
+    editor:SetSize(EW, Hh)
+    local empty = Note(page, "Make a ring with New ring.", EX + 20, -40, EW - 40)
+
+    Text(editor, "Name", 0, -4, "GameFontNormal")
+    local nameBox = EditBox(editor, 60, 0, 150, function(text)
+        local ring = CurrentRing()
+        text = strtrim(text or "")
+        if ring and text ~= "" and text ~= ring.name then ring.name = text; H.Changed("name") end
+        pageRefresh[1]()
+    end)
+    function nameBox:Reset() local ring = CurrentRing(); self:SetText(ring and ring.name or "") end
+    local mine = Check(editor, "Only this character", 218, 0,
+        function() local r = CurrentRing(); return r and r.owner ~= nil end,
+        function(on)
+            local r = CurrentRing()
+            if r then H.SetRingOwner(r, on and H.CharacterKey() or nil); H.Changed("owner") end
+        end, 140)
+    Tooltip(mine, "Only this character", "Other characters do not use this ring and its keys. They can still see it under this character's folder and copy it.")
+    Tooltip(Button(editor, "Duplicate", 410, 0, EW - 410, function()
+        local ring = CurrentRing()
+        if ring then CopyCurrent(ring.owner, "here") end
+    end, 24), "Duplicate", "Makes a copy of this ring in the same folder. The copy keeps its key unless something already uses it.")
+
+    Text(editor, "Key", 0, -38, "GameFontNormal")
+    local keyButton = KeyCapture(editor, 60, -34, 130, "key")
+    Tooltip(keyButton, "Key", "Click, then press a key or mouse button (with Shift, Ctrl or Alt if you like). Backspace clears it.")
+    Text(editor, "Gamepad", 204, -38, "GameFontNormal")
+    local padButton = KeyCapture(editor, 270, -34, 130, "padKey")
+    Tooltip(padButton, "Gamepad button", "Click, then press a gamepad button. Backspace clears it. For combinations like R1 + D-pad down, use Make macro and put the macro on that slot of your gamepad bars.")
+    local keyNote = Note(editor, "", 0, -62, EW)
+    local styleButton = Button(editor, "Style", 410, -34, EW - 410, StyleMenu, 24)
+    Tooltip(styleButton, "Style", "How this ring looks. Default follows the Styles tab.")
+
+    local CANVAS = 250
+    local canvas = RingCanvas(editor, 0, -84, CANVAS + 20, CANVAS)
+
+    -- Selected slice details.
+    local DX = CANVAS + 36
+    local DW = EW - DX
+    local detail = CreateFrame("Frame", nil, editor)
+    detail:SetPoint("TOPLEFT", DX, -84)
+    detail:SetSize(DW, CANVAS)
+    local dIcon = RoundIcon(detail, 40)
+    dIcon:SetPoint("TOPLEFT", 0, -4)
+    local dName = detail:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    dName:SetPoint("TOPLEFT", dIcon, "TOPRIGHT", 8, -3)
+    dName:SetPoint("RIGHT", 0, 0)
+    dName:SetJustifyH("LEFT")
+    dName:SetWordWrap(false)
+    local dKind = detail:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    dKind:SetPoint("TOPLEFT", dName, "BOTTOMLEFT", 0, -3)
+    local back = Button(detail, "Earlier", 0, -56, (DW - 4) / 2, function() MoveSlice(-1) end)
+    local fwd = Button(detail, "Later", (DW + 4) / 2, -56, (DW - 4) / 2, function() MoveSlice(1) end)
+    Tooltip(back, "Earlier", "Moves the slice one place anticlockwise. Slice 1 is at the top.")
+    Tooltip(fwd, "Later", "Moves the slice one place clockwise.")
+    local edit = Button(detail, "Edit macro", 0, -82, DW, function()
+        local ring = CurrentRing()
+        local s = ring and selectedSlice and ring.slices[selectedSlice]
+        if s and s.kind == "text" then OpenMacroEditor(s) end
+    end)
+    local remove = Button(detail, "Remove", 0, -108, DW, function() RemoveSlice(selectedSlice) end)
+    local dNote = Note(detail, "", 0, -140, DW)
+    local noSelection = Note(editor, "Drag a slice to move it. Click one to select or remove it.", DX, -90, DW)
+
+    -- Ring-level controls.
+    local hide = Check(editor, "Hide what you can't use now", 0, -(84 + CANVAS + 4),
+        function() local r = CurrentRing(); return r and r.hideMissing end,
+        function(on) local r = CurrentRing(); if r then r.hideMissing = on; H.Changed("hide") end end, 220)
+    Tooltip(hide, "Hide what you can't use now", "Leaves out spells you have not learned and items that are not in your bags. The ring updates outside combat.")
+    local tips = Check(editor, "Show tooltips", 0, -(84 + CANVAS + 28),
+        function() local r = CurrentRing(); return r and r.tooltips end,
+        function(on) local r = CurrentRing(); if r then r.tooltips = on or nil; H.Changed("tooltips") end end, 220)
+    Tooltip(tips, "Show tooltips", "Shows the game tooltip of the slice you point at, beside the ring.")
+    local liveNote = Note(editor, "", 250, -(84 + CANVAS + 10), 180)
+    Text(editor, "Spacing", 250, -(84 + CANVAS + 32), "GameFontHighlight")
+    local spacing = Stepper(editor, 316, -(84 + CANVAS + 28), 56, function(delta)
+        local r = CurrentRing()
+        if not r then return end
+        local v = math.floor(((tonumber(r.spread) or 1) + delta * 0.1) * 10 + 0.5) / 10
+        v = math.max(H.SPREAD_MIN, math.min(H.SPREAD_MAX, v))
+        r.spread = v ~= 1 and v or nil
+        H.Changed("spacing")
+    end)
+    local spacingHelp = CreateFrame("Frame", nil, editor)
+    spacingHelp:SetPoint("TOPLEFT", 250, -(84 + CANVAS + 28))
+    spacingHelp:SetSize(62, 22)
+    Tooltip(spacingHelp, "Spacing", "Moves the slices further apart or closer together. Icons keep their size.")
+    local macroButton = Button(editor, "Macro", EW - 78, -(84 + CANVAS + 28), 78, MakeRingMacro)
+    Tooltip(macroButton, "Macro", MACRO_TIP)
+    local deleteArmed = false
+    local delete = Button(editor, "Delete ring", EW - 120, -(84 + CANVAS + 4), 120, nil)
+    delete:SetScript("OnClick", function(self)
+        if not deleteArmed then
+            deleteArmed = true
+            self:SetText("Click to confirm")
+            C_Timer.After(3, function() deleteArmed = false; if self:IsShown() then self:SetText("Delete ring") end end)
+            return
+        end
+        deleteArmed = false
+        self:SetText("Delete ring")
+        DeleteCurrent()
+    end)
+
+    local foreignBar = ForeignBar(editor, EW)
+    local macroPanel = MacroEditorPanel(editor, 0, -84, EW, CANVAS + 30)
+
+    local function Refresh()
+        list:Refresh()
+        local ring = CurrentRing()
+        editor:SetShown(ring ~= nil)
+        empty:SetShown(ring == nil)
+        foreignBar:Set(ring)
+        if not ring then return end
+        if selectedSlice and not ring.slices[selectedSlice] then selectedSlice = nil end
+        if not nameBox:HasFocus() then nameBox:SetText(ring.name) end
+        mine:Update()
+        hide:Update()
+        tips:Update()
+        local spread = tonumber(ring.spread) or 1
+        spacing.value:SetText(math.floor(spread * 100 + 0.5) .. "%")
+        spacing.minus:SetEnabled(spread > H.SPREAD_MIN + 0.001)
+        spacing.plus:SetEnabled(spread < H.SPREAD_MAX - 0.001)
+        if capturing ~= keyButton then keyButton:SetText(KeyText(ring.key)) end
+        if capturing ~= padButton then padButton:SetText(KeyText(ring.padKey)) end
+        keyNote:SetText(KeyNotes(ring))
+        styleButton:SetText("Style: " .. (ring.style and H.RingSkins.list[ring.style] and ring.style or "Default"))
+        canvas:Refresh(ring)
+
+        local n = #ring.slices
         local s = selectedSlice and ring.slices[selectedSlice]
         detail:SetShown(s ~= nil)
         noSelection:SetShown(s == nil)
@@ -1235,20 +1317,12 @@ local function BuildRings(page)
             edit:SetShown(s.kind == "text")
             remove:ClearAllPoints()
             remove:SetPoint("TOPLEFT", 0, s.kind == "text" and -108 or -82)
-            local note = ""
-            if s.kind == "auto" then
-                local a = H.AUTO_BY_ID[s.source]
-                note = (a and a[4] or "") .. " Fills in by itself."
-            elseif s.kind == "ring" then
-                note = "Opens that ring in place. Right-click or the gamepad cancel button goes back."
-            elseif s.kind == "spell" then
-                note = "Casts the highest rank you know."
-            end
-            dNote:SetText(note)
+            dNote:SetText(SliceNote(s))
         end
         local live = H.live[ring.id]
         liveNote:SetText(live and ("Showing now: " .. #live .. (#live == 1 and " slice" or " slices")) or "")
     end
+    return Refresh, macroPanel
 end
 
 -- Options page ------------------------------------------------------------------------------------
@@ -1337,7 +1411,7 @@ local function BuildOptions(page)
     local howText = Note(how, H.HelpText(), 14, -38, half - 28)
     howText:SetSpacing(2)
 
-    pageRefresh[2] = function()
+    return function()
         for _, fn in ipairs(updaters) do fn() end
         for _, check in ipairs(checks) do check:Update() end
         howText:SetText(H.HelpText())
@@ -1574,7 +1648,7 @@ local function BuildStyles(page)
         cards[index] = card
     end
 
-    pageRefresh[3] = function()
+    return function()
         local icons = {}
         local ring = CurrentRing() or VisibleRings()[1]
         local live = ring and H.live[ring.id]
@@ -1705,8 +1779,24 @@ function H.PlaceRing(key, title)
     placer:Show()
 end
 
+-- What layout B (OptionsModern.lua) builds with: the helpers above and the shared ring parts.
+local K = { Text = Text, Note = Note, Line = Line, Card = Card, Tooltip = Tooltip, Button = Button, Check = Check,
+    EditBox = EditBox, RoundIcon = RoundIcon, KeyCapture = KeyCapture, KeyText = KeyText, KeyNotes = KeyNotes,
+    SliceNote = SliceNote, RingList = RingList, RingCanvas = RingCanvas, ForeignBar = ForeignBar,
+    MacroEditorPanel = MacroEditorPanel, NewRing = NewRing, CopyCurrent = CopyCurrent, DeleteCurrent = DeleteCurrent,
+    MoveSlice = MoveSlice, RemoveSlice = RemoveSlice, MakeRingMacro = MakeRingMacro, MACRO_TIP = MACRO_TIP,
+    StyleMenu = StyleMenu, OpenPopup = OpenPopup, OpenMacroEditor = OpenMacroEditor, CurrentRing = CurrentRing,
+    LIST_W = LIST_W, GOLD = GOLD, NOTE = NOTE, DIM = DIM, ROUND_MASK = ROUND_MASK }
+function K.Selected() return selectedRing, selectedSlice end
+function K.SelectSlice(i) selectedSlice = i end
+function K.Refresh(i) pageRefresh[i or 1]() end
+function K.Capturing() return capturing end
+function K.Skin() return skin end
+
 -- Window ---------------------------------------------------------------------------------------------
-local header
+local header, content, stylesPage, stylesRefresh
+local SetLayout
+local PW, PH = W - 48, H_ - 122
 local function SelectPage(index)
     index = pageFrames[index] and index or 1
     H.db.window.page = index
@@ -1717,6 +1807,43 @@ local function SelectPage(index)
     header:SetText(PAGES[index][1])
     if styleHint then styleHint:SetShown(index == 3 and not InCombatLockdown()) end
     pageRefresh[index]()
+end
+
+local function NewPage()
+    local page = CreateFrame("Frame", nil, content)
+    page:SetPoint("TOPLEFT", 0, -36)
+    page:SetSize(PW, PH)
+    page:Hide()
+    return page
+end
+
+-- Each layout's Rings and Options pages, built the first time it is shown.
+local function Layout(id)
+    if layouts[id] then return layouts[id] end
+    local rings, options = NewPage(), NewPage()
+    local ringsRefresh, macroPanel, optionsRefresh
+    if id == "b" then
+        ringsRefresh, macroPanel = H.BuildRingsB(rings, K)
+        optionsRefresh = H.BuildOptionsB(options, K)
+    else
+        ringsRefresh, macroPanel = BuildRings(rings)
+        optionsRefresh = BuildOptions(options)
+    end
+    layouts[id] = { pages = { rings, options, stylesPage }, refresh = { ringsRefresh, optionsRefresh, stylesRefresh },
+        macro = macroPanel }
+    return layouts[id]
+end
+
+SetLayout = function(id)
+    id = id == "b" and "b" or "a"
+    H.db.window.layout = id ~= "a" and id or nil
+    if capturing then capturing:StopCapture() end
+    ClosePopup()
+    if macroEditor then macroEditor:Hide() end
+    for _, page in ipairs(pageFrames) do page:Hide() end
+    local L = Layout(id)
+    pageFrames, pageRefresh, macroEditor = L.pages, L.refresh, L.macro
+    if frame and frame:IsShown() then SelectPage(H.db.window.page or 1) end
 end
 
 local function Build()
@@ -1747,11 +1874,10 @@ local function Build()
     end)
     local border = frame.legacyBorder or frame
 
-    local content = CreateFrame("Frame", nil, frame)
+    content = CreateFrame("Frame", nil, frame)
     content:SetPoint("TOPLEFT", 26, -42)
     content:SetPoint("BOTTOMRIGHT", -22, 44)
     header = Text(content, "", 2, -2, "GameFontNormalLarge")
-    local PW, PH = W - 48, H_ - 122
     Line(content, 0, -26, PW, 1, 0.45)
 
     local close = Button(frame, "Close", 0, 0, 96, function() userClose = true; frame:Hide() end, 22)
@@ -1775,11 +1901,6 @@ local function Build()
     local tabInfo = C_Texture.GetAtlasInfo("common-sidetab")
     local tabWidth, tabHeight = tabInfo and tabInfo.width or 43, tabInfo and (tabInfo.height - 5) or 55
     for i, info in ipairs(PAGES) do
-        local page = CreateFrame("Frame", nil, content)
-        page:SetPoint("TOPLEFT", 0, -36)
-        page:SetSize(PW, PH)
-        page:Hide()
-        pageFrames[i] = page
         local tab = CreateFrame("Button", nil, frame)
         tab:SetSize(tabWidth, tabHeight)
         tab:SetScale(TAB_SCALE)
@@ -1814,9 +1935,20 @@ local function Build()
         tabs[i] = tab
     end
 
-    BuildRings(pageFrames[1])
-    BuildOptions(pageFrames[2])
-    BuildStyles(pageFrames[3])
+    -- The Styles page is the same in both layouts.
+    stylesPage = NewPage()
+    stylesRefresh = BuildStyles(stylesPage)
+    SetLayout(H.db.window.layout)
+    -- Layout switch, on the footer line left of the version.
+    local switch = H.LayoutSwitch(frame, function() return H.db.window.layout == "b" and "b" or "a" end, H.SetOptionsLayout)
+    switch:SetPoint("RIGHT", version, "LEFT", -12, 0)
+    local switchLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    switchLabel:SetPoint("RIGHT", switch, "LEFT", -6, 0)
+    switchLabel:SetText("Layout")
+    -- The Styles hint shares the footer line: it stops short of the switch.
+    styleHint:SetPoint("RIGHT", switchLabel, "LEFT", -12, 0)
+    styleHint:SetWordWrap(false)
+    frame.layoutSwitch = switch
 
     frame:SetScript("OnShow", function(self)
         if not quietShow then PlaySound(SOUNDKIT.IG_SPELLBOOK_OPEN) end
@@ -1874,6 +2006,14 @@ function H.ToggleOptions(page)
         if page then H.db.window.page = page end
         frame:Show()
     end
+end
+
+-- Layout A (classic) or B (redesigned); kept in HaloDB.window.layout.
+function H.SetOptionsLayout(id)
+    id = id == "b" and "b" or "a"
+    if not frame then H.db.window.layout = id ~= "a" and id or nil; return end
+    SetLayout(id)
+    if frame.layoutSwitch then frame.layoutSwitch:Update() end
 end
 
 -- Addon compartment / Settings entry.

@@ -1134,6 +1134,48 @@ do
     H.DeleteRing(menuRing.id); advance(1)
 end
 
+-- 9c. Layout B: the same window redesigned, behind the footer's A | B switch.
+do
+    check(H.db.window.layout == nil, "layout A by default")
+    local first = #frames + 1
+    SlashCmdList.HALO("layout b"); advance(0.1)
+    check(H.db.window.layout == "b" and HaloOptions.shown, "/halo layout b switches the open window")
+    local bRing = H.NewRing("B ring"); advance(1)
+    H.ToggleOptions(1); advance(0.1)
+    local row, more
+    for i = first, #frames do
+        local f = frames[i]
+        if rawget(f, "ringID") == bRing.id then row = f end
+        if rawget(f, "text") == "..." then more = f end
+    end
+    check(row and more, "layout B has its own ring list and a ... button")
+    row.scripts.OnClick(row); advance(0.1)
+    -- The ... menu: Duplicate, Make macro, and Delete behind a confirmation submenu.
+    local P = H.Popup
+    more.scripts.OnClick(more)
+    local function rowNamed(level, text)
+        for _, r in ipairs(P.panels[level] and P.panels[level].rows or {}) do
+            if r.shown and r.text.text == text then return r end
+        end
+    end
+    check(P.IsOpen() and rowNamed(1, "B ring") and rowNamed(1, "Duplicate") and rowNamed(1, "Make macro"), "the ... menu lists the ring's actions")
+    local del = rowNamed(1, "Delete ring")
+    del.scripts.OnClick(del)
+    check(H.GetRing(bRing.id) and rowNamed(2, "Yes, delete it"), "Delete asks first")
+    local yes = rowNamed(2, "Yes, delete it")
+    yes.scripts.OnClick(yes); advance(1)
+    check(not H.GetRing(bRing.id) and not P.IsOpen(), "confirming deletes the ring")
+    -- Options page: rows fold with their switch; both states refresh.
+    H.ToggleOptions(2)
+    H.SetOption("numberKeys", false); advance(0.1)
+    H.SetOption("openAt", "center"); advance(0.1)
+    H.SetOption("numberKeys", true); H.SetOption("openAt", "cursor"); advance(0.1)
+    H.ToggleOptions(3)
+    H.SetOptionsLayout("a"); advance(0.1)
+    check(H.db.window.layout == nil and HaloOptions.shown, "back to layout A")
+    H.ToggleOptions(1)
+end
+
 -- Placement tool: drop the outline, Done saves it as a screen fraction.
 H.PlaceRing("padPos", "Gamepad ring")
 check(HaloPlacer.slots[3] and HaloPlacer.slots[3].shown ~= false and HaloPlacer.art ~= nil or H.RingSkins.Get(H.Option("style")).buildRing == nil,

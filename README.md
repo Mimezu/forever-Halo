@@ -57,6 +57,20 @@ with the **Style** button in the ring editor.
   rings and a glowing hover. No pointer.
 - **E Parchment** — a round parchment with gilded portrait rings and a dark pointer; unfolds.
 
+## Window layouts
+
+The footer's **Layout A | B** switch (or `/halo layout a` / `/halo layout b`) picks how the window
+is drawn. Both have the same settings; A is the classic window and the default.
+
+- **B, Rings**: a header line with the ring's icon, name, **Only this character** and a **...** menu
+  (Duplicate, Make macro, Delete ring with a confirmation step); keys and style on one line; a
+  bigger ring; beside it an inspector for the selected slice (or how to fill the ring when none is
+  selected) and a **This ring** card (Hide what you can't use, Show tooltips, Spacing). The ring
+  list hides its scroll bar while everything fits and marks the selected ring with a gold bar.
+- **B, Options**: one label column and one control column; choices and steppers sit in one plate;
+  rows that depend on another (Show slice numbers, the fixed position) show only while they apply;
+  explanations are in the rows' tooltips.
+
 ## Making rings
 
 - **New ring**, then give it a **Key** and/or a **Gamepad** button. Click the button, then press

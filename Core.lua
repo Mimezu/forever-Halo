@@ -4,7 +4,7 @@
 local ADDON, H = ...
 Halo = H
 
-H.version = C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version") or "0.9.21"
+H.version = C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version") or "0.9.22"
 H.MAX_SLICES = 12
 
 local DEFAULT_OPTIONS = {
@@ -424,6 +424,9 @@ SlashCmdList.HALO = function(message)
         if H.CameraState then H.CameraState() end
     elseif message == "textures" then
         if H.DumpTextures then H.DumpTextures() end
+    elseif message == "layout a" or message == "layout b" then
+        if H.SetOptionsLayout then H.SetOptionsLayout(message:sub(-1)) end
+        H.Print("Window layout " .. message:sub(-1):upper() .. ".")
     elseif message == "status" then
         if H.Status then H.Status() end
     else
