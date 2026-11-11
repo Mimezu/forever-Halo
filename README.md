@@ -95,11 +95,11 @@ fill the room that is left (the editor says "full" when the ring is at 12).
 Automatic lists fill themselves outside combat: Potions (healthstones first), Elixirs and flasks,
 Scrolls, Favourite mounts (usable here; all mounts if you have no favourites), Favourite pets.
 
-Two automatic slices stay one slice each and pick the best you can use (quality, then item level;
+Two automatic slices hold one best item each (Food and drink: one food, one drink) and pick the best you can use (quality, then item level;
 nothing above your level, nothing the game says you cannot use):
 
-- **Food and drink**: the best food, plus the best drink if your class uses mana. One press eats
-  and drinks (`/use` the food, then the drink). A class without mana gets food only.
+- **Food and drink**: a slice with the best food and, if your class uses mana, a slice with the
+  best drink. A class without mana gets food only.
 - **Bandages**: the best bandage your First Aid allows.
 
 Starter rings (no keys): Supplies, Travel, Emotes.

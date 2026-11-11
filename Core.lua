@@ -4,7 +4,7 @@
 local ADDON, H = ...
 Halo = H
 
-H.version = C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version") or "0.9.24"
+H.version = C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version") or "0.9.25"
 H.MAX_SLICES = 12
 
 local DEFAULT_OPTIONS = {

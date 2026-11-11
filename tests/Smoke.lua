@@ -1391,8 +1391,8 @@ do
     H.DeleteRing(full.id)
     C_MountJournal = nil
 end
--- Food and drink, Bandages: one slice each, the best you can use. A mana class gets food and
--- drink in one press; items above your level or that you cannot use are passed over.
+-- Food and drink: the best food and, for a mana class, the best drink, one slice each. Bandages:
+-- the best one. Items above your level or that you cannot use are passed over.
 do
     local data = {   -- itemID = { subclass, use spell, item level, required level, usable }
         [4540] = { 5, "Food", 5, 1, true }, [4541] = { 5, "Food", 15, 5, true }, [4542] = { 5, "Food", 25, 15, true },
@@ -1414,14 +1414,13 @@ do
     local ring = H.NewRing("Camp")
     ring.slices = { { kind = "auto", source = "food" }, { kind = "auto", source = "bandages" } }
     local live = H.ExpandRing(ring)
-    check(#live == 2, "food and drink, bandages: one slice each")
-    check(live[1].kind == "meal" and live[1].food == 4541 and live[1].drink == 1179,
-        "a mage gets the best food and drink at their level (not the level 15 food)")
-    check(H.SliceAttributes(live[1]).macrotext == "/use item:4541" .. string.char(10) .. "/use item:1179", "one press eats and drinks")
-    check(live[2].kind == "item" and live[2].itemID == 1251, "the best bandage you can use (not the one beyond your First Aid)")
+    check(#live == 3, "food, drink, bandage: one slice each")
+    check(live[1].itemID == 4541 and live[2].itemID == 1179,
+        "a mage gets the best food, then the best drink, at their level (not the level 15 food)")
+    check(live[3].kind == "item" and live[3].itemID == 1251, "the best bandage you can use (not the one beyond your First Aid)")
     UnitClass = function() return "Warrior", "WARRIOR" end
     live = H.ExpandRing(ring)
-    check(live[1].kind == "item" and live[1].itemID == 4541, "a warrior gets food only")
+    check(#live == 2 and live[1].itemID == 4541 and live[2].itemID == 1251, "a warrior gets food only")
     check(H.MealKind("Refreshment") == "both" and H.MealKind("Food & Drink") == "both" and H.MealKind(nil) == "food", "meal kinds")
     H.DeleteRing(ring.id)
     bags[0], C_Item.GetItemInfoInstant, C_Item.GetItemSpell, C_Item.GetDetailedItemLevelInfo,

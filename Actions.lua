@@ -48,7 +48,7 @@ H.AUTO = {
     { "potions", "Potions", "Interface\\Icons\\INV_Potion_54", "Healthstones and potions in your bags, healthstones first." },
     { "elixirs", "Elixirs and flasks", "Interface\\Icons\\INV_Potion_45", "Elixirs and flasks in your bags." },
     { "food", "Food and drink", "Interface\\Icons\\INV_Misc_Food_15",
-        "One slice: the best food in your bags, and the best drink too if your class uses mana. One press eats and drinks." },
+        "The best food in your bags, and beside it the best drink if your class uses mana." },
     { "bandages", "Bandages", "Interface\\Icons\\INV_Misc_Bandage_15", "One slice: the best bandage in your bags that you can use." },
     { "scrolls", "Scrolls", "Interface\\Icons\\INV_Scroll_02", "Scrolls in your bags." },
     { "mounts", "Favourite mounts", "Interface\\Icons\\Ability_Mount_RidingHorse",
@@ -328,31 +328,6 @@ K.ring = {
     state = function() return nil, nil, nil, true, false end,
 }
 
--- Food and drink in one press (the automatic Food and drink list): /use the food, then the drink.
-K.meal = {
-    label = "Food and drink",
-    info = function(s)
-        local food, icon = K.item.info({ itemID = s.food })
-        local drink = K.item.info({ itemID = s.drink })
-        return food .. " + " .. drink, icon
-    end,
-    known = function(s) return ItemCount(s.food) > 0 or ItemCount(s.drink) > 0 end,
-    attr = function(s)
-        return { type = "macro", macrotext = "/use item:" .. tonumber(s.food) .. "\n/use item:" .. tonumber(s.drink) }
-    end,
-    state = function(s)
-        local count = ItemCount(s.food)
-        return count, nil, nil, count > 0 or ItemCount(s.drink) > 0, false
-    end,
-    tooltip = function(s, tip)
-        tip:AddLine("Eat and drink", 1, 1, 1)
-        for _, id in ipairs({ s.food, s.drink }) do
-            tip:AddLine((K.item.info({ itemID = id })) .. "  x" .. ItemCount(id), 1, 0.82, 0)
-        end
-        tip:AddLine("One press uses both.", 0.75, 0.75, 0.75, true)
-    end,
-}
-
 K.auto = {
     label = "Automatic",
     info = function(s)
@@ -365,7 +340,7 @@ K.auto = {
         local a = AUTO_BY_ID[s.source]
         tip:AddLine(a and a[2] or "Automatic", 1, 1, 1)
         if a then tip:AddLine(a[4], 1, 0.82, 0, true) end
-        if s.source ~= "food" and s.source ~= "bandages" then
+        if s.source ~= "food" and s.source ~= "bandages" then   -- those hold one best item each
             tip:AddLine("Fills in by itself, up to the ring's 12 slices.", 0.75, 0.75, 0.75, true)
         end
     end,
@@ -474,7 +449,8 @@ local function BagConsumables(subclasses, limit, withHealthstones)
     return out
 end
 
--- One-slice lists (Food and drink, Bandages): the best item of the kind you can use now.
+-- Best-item lists (Food and drink: one food, one drink; Bandages: one): the best of the kind
+-- you can use now.
 -- Best is the bag order above (quality, then item level); items above your level, or that the
 -- game says you cannot use (a bandage beyond your First Aid), are passed over.
 local MANA_CLASSES = { MAGE = true, PRIEST = true, WARLOCK = true, DRUID = true, PALADIN = true, SHAMAN = true, HUNTER = true }
@@ -512,9 +488,10 @@ local function Meal(placed)
     local drink
     local _, class = Call(UnitClass, "player")
     if MANA_CLASSES[Plain(class)] then drink = BestUsable(CONSUMABLE_SOURCES.food, placed, Is("drink")) end
-    if food and drink and food ~= drink then return { { kind = "meal", food = food, drink = drink, auto = true } } end
-    local one = food or drink
-    return one and { { kind = "item", itemID = one, auto = true } } or {}
+    local out = {}
+    if food then out[#out + 1] = { kind = "item", itemID = food, auto = true } end
+    if drink and drink ~= food then out[#out + 1] = { kind = "item", itemID = drink, auto = true } end
+    return out
 end
 
 local function Bandage(placed)
