@@ -518,7 +518,8 @@ function H.BuildRingsB(page, K)
         local n = #ring.slices
         local live = H.live[ring.id]
         local count = n .. (n == 1 and " slice" or " slices")
-        countNote:SetText(live and #live ~= n and (count .. ", " .. #live .. " showing now") or count)
+        local full = live and #live >= H.MAX_SLICES and " (full)" or ""
+        countNote:SetText((live and #live ~= n and (count .. ", " .. #live .. " showing now") or count) .. full)
 
         local s = i and ring.slices[i]
         sel:SetShown(s ~= nil)

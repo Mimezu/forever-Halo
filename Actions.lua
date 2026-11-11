@@ -474,28 +474,38 @@ local function Pets(limit)
 end
 
 -- The concrete slices a ring shows right now, in order. hideMissing drops the ones
--- you cannot use (spell not learned, item not in bags).
+-- you cannot use (spell not learned, item not in bags). A ring shows up to MAX_SLICES:
+-- slices placed by hand always get their place, automatic lists fill the room left.
 function H.ExpandRing(ring)
     local out = {}
     local limit = H.MAX_SLICES
     -- Items placed by hand are not repeated by an automatic list.
     local placed = {}
-    for _, s in ipairs(ring.slices) do
+    local shows, later = {}, 0
+    for i, s in ipairs(ring.slices) do
         if s.kind == "item" and s.itemID then placed[s.itemID] = true end
+        shows[i] = s.kind ~= "auto" and (not ring.hideMissing or H.SliceKnown(s))
+        if shows[i] then later = later + 1 end
     end
-    for _, s in ipairs(ring.slices) do
+    for i, s in ipairs(ring.slices) do
         if #out >= limit then break end
         if s.kind == "auto" then
+            -- Room for this list: what is left after the hand-placed slices still to come.
+            local room = limit - #out - later
             local list
-            if CONSUMABLE_SOURCES[s.source] then
-                list = BagConsumables(CONSUMABLE_SOURCES[s.source], limit - #out, s.source == "potions")
-            elseif s.source == "mounts" then list = Mounts(limit - #out)
-            elseif s.source == "pets" then list = Pets(limit - #out) end
+            if room <= 0 then list = nil
+            elseif CONSUMABLE_SOURCES[s.source] then
+                list = BagConsumables(CONSUMABLE_SOURCES[s.source], room + 4, s.source == "potions")
+            elseif s.source == "mounts" then list = Mounts(room)
+            elseif s.source == "pets" then list = Pets(room) end
+            local taken = 0
             for _, item in ipairs(list or {}) do
-                if not (item.itemID and placed[item.itemID]) and #out < limit then out[#out + 1] = item end
+                if taken >= room then break end
+                if not (item.itemID and placed[item.itemID]) then out[#out + 1] = item; taken = taken + 1 end
             end
-        elseif not ring.hideMissing or H.SliceKnown(s) then
+        elseif shows[i] then
             out[#out + 1] = s
+            later = later - 1
         end
     end
     return out

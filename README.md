@@ -89,6 +89,9 @@ is drawn. Both have the same settings; A is the classic window and the default.
   could see are left out). **Copy for everyone** makes a shared copy. **Duplicate** copies your
   own ring into the same folder.
 
+A ring shows up to 12 slices. Slices you placed yourself always get their place; automatic lists
+fill the room that is left (the editor says "full" when the ring is at 12).
+
 Automatic lists fill themselves outside combat: Potions (healthstones first), Elixirs and flasks, Food and drink,
 Bandages, Scrolls, Favourite mounts (usable here; all mounts if you have no favourites),
 Favourite pets.

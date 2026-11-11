@@ -1368,4 +1368,27 @@ table.remove(H.db.rings[1].slices, 1)
 table.remove(bags[0])
 H.Changed("undo healthstone"); advance(1)
 check(H.live[1][1].itemID == 118, "no healthstone in the bags: the potion comes first again")
+-- A ring shows up to 12 slices: slices placed by hand keep their place, automatic lists fill
+-- the room left (a long list used to take every place and push later slices out).
+do
+    local ids = {}
+    for i = 1, 15 do ids[i] = 900 + i end
+    C_MountJournal = {
+        GetMountIDs = function() return ids end,
+        GetMountInfoByID = function(id) return ("Mount%02d"):format(id - 900), 1, 1, false, true, nil, true, nil, nil, nil, true end,
+    }
+    local full = H.NewRing("Full")
+    full.slices = { { kind = "auto", source = "mounts" }, { kind = "spell", spellID = 116 },
+        { kind = "text", text = "/wave", label = "Wave" }, { kind = "spell", spellID = 133 } }
+    full.hideMissing = true
+    local live = H.ExpandRing(full)
+    check(#live == H.MAX_SLICES, "the ring is full: " .. #live)
+    check(live[11].spellID == 116 and live[12].kind == "text", "the slices placed after the list still show")
+    check(live[10].kind == "mount", "the mounts fill the room left (10)")
+    full.hideMissing = false
+    live = H.ExpandRing(full)
+    check(#live == 12 and live[9].kind == "mount" and live[12].spellID == 133, "a hidden spell's place goes back to it when shown")
+    H.DeleteRing(full.id)
+    C_MountJournal = nil
+end
 print(("Halo smoke (with audit checks): %d checks passed"):format(assertions))

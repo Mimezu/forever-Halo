@@ -1320,7 +1320,8 @@ local function BuildRings(page)
             dNote:SetText(SliceNote(s))
         end
         local live = H.live[ring.id]
-        liveNote:SetText(live and ("Showing now: " .. #live .. (#live == 1 and " slice" or " slices")) or "")
+        liveNote:SetText(live and ("Showing now: " .. #live .. (#live == 1 and " slice" or " slices")
+            .. (#live >= H.MAX_SLICES and " (full)" or "")) or "")
     end
     return Refresh, macroPanel
 end
