@@ -4,7 +4,7 @@
 local ADDON, H = ...
 Halo = H
 
-H.version = C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version") or "0.9.23"
+H.version = C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version") or "0.9.24"
 H.MAX_SLICES = 12
 
 local DEFAULT_OPTIONS = {
@@ -388,7 +388,7 @@ end)
 local contentEvents = CreateFrame("Frame")
 for _, event in ipairs({ "BAG_UPDATE_DELAYED", "SPELLS_CHANGED", "LEARNED_SPELL_IN_TAB",
     "NEW_MOUNT_ADDED", "NEW_PET_ADDED", "NEW_TOY_ADDED", "PET_JOURNAL_LIST_UPDATE",
-    "EQUIPMENT_SETS_CHANGED", "UPDATE_MACROS", "PLAYER_EQUIPMENT_CHANGED" }) do
+    "EQUIPMENT_SETS_CHANGED", "UPDATE_MACROS", "PLAYER_EQUIPMENT_CHANGED", "PLAYER_LEVEL_UP", "SKILL_LINES_CHANGED" }) do
     pcall(contentEvents.RegisterEvent, contentEvents, event)
 end
 contentEvents:SetScript("OnEvent", function()

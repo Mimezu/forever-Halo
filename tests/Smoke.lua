@@ -1391,4 +1391,41 @@ do
     H.DeleteRing(full.id)
     C_MountJournal = nil
 end
+-- Food and drink, Bandages: one slice each, the best you can use. A mana class gets food and
+-- drink in one press; items above your level or that you cannot use are passed over.
+do
+    local data = {   -- itemID = { subclass, use spell, item level, required level, usable }
+        [4540] = { 5, "Food", 5, 1, true }, [4541] = { 5, "Food", 15, 5, true }, [4542] = { 5, "Food", 25, 15, true },
+        [159] = { 5, "Drink", 5, 1, true }, [1179] = { 5, "Drink", 15, 5, true },
+        [1251] = { 7, "First Aid", 5, 1, true }, [2581] = { 7, "First Aid", 15, 1, false },
+    }
+    local saved = { bags[0], C_Item.GetItemInfoInstant, C_Item.GetItemSpell, C_Item.GetDetailedItemLevelInfo,
+        C_Item.GetItemInfo, C_Item.IsUsableItem, C_Item.GetItemCount, UnitLevel, UnitClass }
+    bags[0] = {}
+    for id in pairs(data) do bags[0][#bags[0] + 1] = { itemID = id, quality = 1 } end
+    C_Item.GetItemInfoInstant = function(id) local d = data[id]; if d then return id, nil, nil, nil, 1, 0, d[1] end end
+    C_Item.GetItemSpell = function(id) return data[id] and data[id][2] end
+    C_Item.GetDetailedItemLevelInfo = function(id) return data[id] and data[id][3] end
+    C_Item.GetItemInfo = function(id) local d = data[id]; if d then return "Item" .. id, nil, 1, d[3], d[4] end end
+    C_Item.IsUsableItem = function(id) return data[id] == nil or data[id][5] end
+    C_Item.GetItemCount = function(id) return data[id] and 5 or 0 end
+    function UnitLevel() return 10 end
+    advance(1)
+    local ring = H.NewRing("Camp")
+    ring.slices = { { kind = "auto", source = "food" }, { kind = "auto", source = "bandages" } }
+    local live = H.ExpandRing(ring)
+    check(#live == 2, "food and drink, bandages: one slice each")
+    check(live[1].kind == "meal" and live[1].food == 4541 and live[1].drink == 1179,
+        "a mage gets the best food and drink at their level (not the level 15 food)")
+    check(H.SliceAttributes(live[1]).macrotext == "/use item:4541" .. string.char(10) .. "/use item:1179", "one press eats and drinks")
+    check(live[2].kind == "item" and live[2].itemID == 1251, "the best bandage you can use (not the one beyond your First Aid)")
+    UnitClass = function() return "Warrior", "WARRIOR" end
+    live = H.ExpandRing(ring)
+    check(live[1].kind == "item" and live[1].itemID == 4541, "a warrior gets food only")
+    check(H.MealKind("Refreshment") == "both" and H.MealKind("Food & Drink") == "both" and H.MealKind(nil) == "food", "meal kinds")
+    H.DeleteRing(ring.id)
+    bags[0], C_Item.GetItemInfoInstant, C_Item.GetItemSpell, C_Item.GetDetailedItemLevelInfo,
+        C_Item.GetItemInfo, C_Item.IsUsableItem, C_Item.GetItemCount, UnitLevel, UnitClass = unpack(saved, 1, 9)
+    advance(1)
+end
 print(("Halo smoke (with audit checks): %d checks passed"):format(assertions))

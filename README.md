@@ -92,9 +92,15 @@ is drawn. Both have the same settings; A is the classic window and the default.
 A ring shows up to 12 slices. Slices you placed yourself always get their place; automatic lists
 fill the room that is left (the editor says "full" when the ring is at 12).
 
-Automatic lists fill themselves outside combat: Potions (healthstones first), Elixirs and flasks, Food and drink,
-Bandages, Scrolls, Favourite mounts (usable here; all mounts if you have no favourites),
-Favourite pets.
+Automatic lists fill themselves outside combat: Potions (healthstones first), Elixirs and flasks,
+Scrolls, Favourite mounts (usable here; all mounts if you have no favourites), Favourite pets.
+
+Two automatic slices stay one slice each and pick the best you can use (quality, then item level;
+nothing above your level, nothing the game says you cannot use):
+
+- **Food and drink**: the best food, plus the best drink if your class uses mana. One press eats
+  and drinks (`/use` the food, then the drink). A class without mana gets food only.
+- **Bandages**: the best bandage your First Aid allows.
 
 Starter rings (no keys): Supplies, Travel, Emotes.
 
