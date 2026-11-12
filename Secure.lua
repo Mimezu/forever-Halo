@@ -48,6 +48,12 @@ header:Execute([[
         keys:SetBindingClick(true, "ESCAPE", BTN, "close")
         for i = 1, #r.confirm do keys:SetBindingClick(true, r.confirm[i], BTN, "use") end
         if r.padCancel then keys:SetBindingClick(true, r.padCancel, BTN, "back") end
+        -- Layers: the opening ring's chord buttons (R3 ring, R3 + L1 ring...). Bound last, so
+        -- they replace a confirm or cancel on the same button.
+        local root = layerRoot and RINGS[layerRoot]
+        if root and root.layers then
+            for btn, cid in pairs(root.layers) do keys:SetBindingClick(true, btn, BTN, "y" .. cid) end
+        end
         -- Keep / use on release: the stick's directions are real bindable keys
         -- (PADRSTICKUP...). Each time the stick enters or leaves one, "aim<dir>" reads the
         -- angle; a release with the stick near the middle means it was let go.
@@ -73,6 +79,7 @@ header:Execute([[
         if r.n == 0 then owner:CallMethod("OnRingEmpty", rid); return false end
         if active then owner:Run(Close) end
         active, sticky, held = rid, false, nil
+        layerRoot = r.layers and rid or nil
         stickyPick = nil
         aimCount = 0
         wipe(aimHeld); aimArmed, aimMax, aimLast = false, 0, nil
@@ -97,7 +104,7 @@ header:Execute([[
         local used = ...
         if not active then return end
         local was = active
-        active, sticky, held = nil, false, nil
+        active, sticky, held, layerRoot = nil, false, nil, nil
         stickyPick = nil
         wipe(aimHeld); aimArmed, aimMax, aimLast = false, 0, nil
         wipe(stack)
@@ -190,10 +197,25 @@ header:Execute([[
         owner:CallMethod("OnRingSwitch", active, true)
     ]==]
 
+    -- A layer button held (y<id>): that ring takes over; let go: back to the opening ring.
+    Layer = [==[
+        local cid, down = ...
+        if not layerRoot then return end
+        local target = down and cid or layerRoot
+        if not down and active ~= cid then return end
+        local r = RINGS[target]
+        if not r or r.n == 0 or target == active then return end
+        wipe(stack)
+        active = target
+        stickyPick, aimArmed, aimMax, aimLast = nil, false, 0, nil
+        owner:Run(SetKeys)
+        owner:CallMethod("OnRingSwitch", target, not down)
+    ]==]
+
     -- The open ring is this one, or was opened from it (nested rings).
     Owns = [==[
         local rid = ...
-        if active == rid then return true end
+        if active == rid or layerRoot == rid then return true end
         for k = 1, #stack do
             if stack[k] == rid then return true end
         end
@@ -322,6 +344,11 @@ header:WrapScript(button, "OnClick", [[
         end
         return false
     end
+    local layer = tonumber(strmatch(b, "^y(%d+)$"))
+    if layer then
+        owner:Run(Layer, layer, down)
+        return false
+    end
     local si = tonumber(strmatch(b, "^s(%d+)$"))
     if si then
         if not down then return false end
@@ -410,6 +437,12 @@ end
 
 local function KeyOrNil(key)
     return type(key) == "string" and key ~= "" and key or nil
+end
+
+-- A gamepad chord "PADRSTICK+PADLSHOULDER": the ring on the first button, the second held.
+function H.SplitChord(key)
+    if type(key) ~= "string" then return nil end
+    return key:match("^([^+]+)%+([^+]+)$")
 end
 
 -- The ring's keys, keyboard and gamepad, without holes. (ipairs({ key, padKey }) stops at
@@ -534,12 +567,24 @@ function H.Compile()
     }
     wipe(H.live)
     wipe(ringBindings)
+    -- Chord rings: base button -> { second button -> ring id }. Not bound themselves; the
+    -- ring on the base button switches to them while it is open.
+    local chords = {}
+    for _, ring in ipairs(H.db.rings) do
+        local base, second = H.SplitChord(ring.padKey)
+        if base and H.RingActiveHere(ring) then
+            chords[base] = chords[base] or {}
+            chords[base][second] = ring.id
+        end
+    end
     for _, ring in ipairs(H.db.rings) do
         if H.RingActiveHere(ring) then
             local slices = H.ExpandRing(ring)
             H.live[ring.id] = slices
             local n = #slices
             local key, padKey = KeyOrNil(ring.key), KeyOrNil(ring.padKey)
+            local chord = H.SplitChord(padKey) ~= nil
+            if chord then padKey = nil end
             local dead = math.min(40, math.max(14, H.RingRadius(n) * scale * 0.4))
             local mods = {}
             for _, m in ipairs(Modifiers(key)) do mods[#mods + 1] = Q(m) end
@@ -553,6 +598,13 @@ function H.Compile()
             for _, button in ipairs(ConfirmButtons(ring)) do confirm[#confirm + 1] = Q(button) end
             lines[#lines + 1] = "r.confirm = newtable(" .. table.concat(confirm, ",") .. ")"
             if padKey ~= "PAD2" and key ~= "PAD2" then lines[#lines + 1] = 'r.padCancel = "PAD2"' end
+            local layers = padKey and chords[padKey]
+            if layers then
+                lines[#lines + 1] = "r.layers = newtable()"
+                for second, cid in pairs(layers) do
+                    lines[#lines + 1] = ("r.layers[%s] = %d"):format(Q(second), cid)
+                end
+            end
             for i, s in ipairs(slices) do
                 lines[#lines + 1] = ("s = newtable(); r[%d] = s"):format(i)
                 if s.kind == "ring" then
@@ -597,6 +649,7 @@ end
 -- nil when the key opens this ring; otherwise who has it.
 function H.KeyTakenBy(key, ringID)
     if type(key) ~= "string" or key == "" or not GetBindingAction then return nil end
+    if H.SplitChord(key) then return nil end   -- chords are not bindings
     local action = GetBindingAction(key, true) or ""
     local own = tonumber(action:match("^CLICK HaloButton:[rp](%d+)$"))
     if own == ringID then return nil end

@@ -941,6 +941,37 @@ check(click("p" .. other.id, true) == "LeftButton" and env.active == nil, "tap: 
 stickState.x, stickState.y, stickState.len = 0, 0, 0
 H.SetOption("padMode", "hold"); H.DeleteRing(other.id); advance(1); advance(1)
 
+-- Chord layers: a ring on PADDUP + L1 takes over while L1 is held in the PADDUP ring.
+do
+    local layer = H.NewRing("Layer")
+    layer.padKey = spells.padKey .. "+PADLSHOULDER"
+    layer.slices = { { kind = "emote", token = "bow" } }
+    H.Changed("layer"); advance(1)
+    local y = "y" .. layer.id
+    check(overrides[binds]["PADLSHOULDER"] == nil and overrides[binds][layer.padKey] == nil, "chord: nothing bound outside a ring")
+    stickState.x, stickState.y, stickState.len = 0, 1, 1
+    click("p" .. rid, true)
+    check(overrides[keys]["PADLSHOULDER"] == "HaloButton:" .. y, "chord: L1 switches layers while open")
+    check(overrides[keys]["PADRSHOULDER"] == "HaloButton:use", "chord: other confirm buttons stay")
+    click(y, true)
+    check(env.active == layer.id, "chord: holding L1 shows the layer ring")
+    click(y, false)
+    check(env.active == rid, "chord: letting go of L1 goes back")
+    click(y, true)
+    check(click("p" .. rid, false) == "LeftButton" and env.active == nil, "chord hold: release uses the layer's slice")
+    click(y, false)
+    check(env.active == nil, "chord: L1 up after closing does nothing")
+    H.SetOption("padMode", "tap"); advance(1); advance(1)
+    click("p" .. rid, true); click("p" .. rid, false)
+    click(y, true)
+    check(env.active == layer.id, "chord tap: layer shown")
+    check(click("p" .. rid, true) == "LeftButton" and env.active == nil, "chord tap: the ring button uses the layer's slice")
+    click("p" .. rid, false); click(y, false)
+    check(click(y, true) == false and env.active == nil, "chord: L1 alone opens nothing")
+    stickState.x, stickState.y, stickState.len = 0, 0, 0
+    H.SetOption("padMode", "hold"); H.DeleteRing(layer.id); advance(1); advance(1)
+end
+
 -- 8e. Every style opens, animates to the end and closes; per-ring style wins over the default.
 for _, id in ipairs(H.RingSkins.order) do
     H.SetOption("style", id); advance(1)

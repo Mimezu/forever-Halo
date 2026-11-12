@@ -32,6 +32,10 @@ Everything the short README leaves out.
   stays still with the right stick (you can still walk), walking stops with the left stick. This
   works in combat too. After a ring closes, the stick comes back once it is centred. "Block both
   sticks" takes both. The "How to use" box in Options shows only what applies to your settings.
+- Layers: when setting a ring's Gamepad button, hold one button and press another (R3, then L1)
+  to record R3 + L1. While the R3 ring is open, holding L1 shows the R3 + L1 ring; letting go of
+  L1 goes back. The slice is used the usual way (release R3 in Hold, tap R3 or A/R1... in Tap).
+  L1 then does not confirm in that ring. A layer needs a ring on R3 itself.
 - Combinations such as R1 + D-pad down: click **Macro** in the ring editor and put the macro on that
   slot of Blizzard's gamepad bars. Each button alone keeps its normal action. A ring opened by its
   macro works like tap mode.

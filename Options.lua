@@ -152,12 +152,21 @@ end
 -- Keys ---------------------------------------------------------------------------------------------
 local function KeyText(key)
     if not key or key == "" then return "Not set" end
+    local base, second = H.SplitChord(key)
+    if base then return KeyText(base) .. " + " .. KeyText(second) end
     local text = GetBindingText and GetBindingText(key) or key
     return text ~= "" and text or key
 end
 
 local function BindingOwnerText(key)
     if not key then return nil end
+    local base = H.SplitChord(key)
+    if base then
+        for _, ring in ipairs(H.db.rings) do
+            if ring.padKey == base and H.RingActiveHere(ring) then return nil end
+        end
+        return "|cffff6040Needs a ring on " .. KeyText(base) .. "|r"
+    end
     local current = GetBindingAction and GetBindingAction(key, true)
     if H.IsBlizzardGamepadAction(current) then return "Replaces a Blizzard binding" end
     local takenBy = H.KeyTakenBy(key, selectedRing)
@@ -238,10 +247,16 @@ local function KeyCapture(parent, x, y, width, field)
         end)
         if self.EnableGamePadButton and not InCombatLockdown() then
             pcall(self.EnableGamePadButton, self, true)
-            -- One gamepad button, recorded when it is let go (combinations: the ring's macro
-            -- on a gamepad bar slot).
+            -- One gamepad button, recorded when it is let go; a second button pressed while
+            -- the first is held records the chord "FIRST+SECOND" (a layer of the first's ring).
             self:SetScript("OnGamePadButtonDown", function(me, key)
                 if field ~= "padKey" then return end
+                if me.pendingModifier and me.pendingModifier ~= key then
+                    local first = me.pendingModifier
+                    me.pendingModifier = nil
+                    Assign(me, first .. "+" .. key)
+                    return
+                end
                 me.pendingModifier = me.pendingModifier or key
             end)
             self:SetScript("OnGamePadButtonUp", function(me, key)
@@ -1202,7 +1217,7 @@ local function BuildRings(page)
     Tooltip(keyButton, "Key", "Backspace: clear")
     Text(editor, "Gamepad", 204, -38, "GameFontNormal")
     local padButton = KeyCapture(editor, 270, -34, 130, "padKey")
-    Tooltip(padButton, "Gamepad button", "Backspace: clear. Combos: Make macro")
+    Tooltip(padButton, "Gamepad button", "Backspace: clear. Hold one, press another: layer")
     local keyNote = Note(editor, "", 0, -62, EW)
     local styleButton = Button(editor, "Style", 410, -34, EW - 410, StyleMenu, 24)
     Tooltip(styleButton, "Style", "Default follows the Styles tab")

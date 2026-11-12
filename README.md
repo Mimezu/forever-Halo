@@ -13,7 +13,8 @@ Put the `Halo` folder in `World of Warcraft\_forever_\Interface\AddOns\`.
 - Drop spells, items, mounts, toys, pets or macros on the ring. **+** adds emotes, markers, lists, other rings, macros.
 - Drag a slice to move it. Right-click removes it.
 - A ring holds 12 slices. Automatic lists fill what is left.
-- Gamepad combos (R1 + D-pad): **...** → **Make macro**, put it on a gamepad bar slot.
+- Gamepad layers: give a ring R3, another R3 + L1. Hold L1 in the R3 ring to switch.
+- Gamepad bar combos (R1 + D-pad): **...** → **Make macro**, put it on that slot.
 - Works in combat. Ring changes made in combat apply after.
 
 | Input | Action |

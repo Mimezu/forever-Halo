@@ -4,7 +4,7 @@
 local ADDON, H = ...
 Halo = H
 
-H.version = C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version") or "0.9.26"
+H.version = C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version") or "0.9.27"
 H.MAX_SLICES = 12
 
 local DEFAULT_OPTIONS = {
@@ -97,14 +97,7 @@ local function Migrate(db)
     if db.options.hints == nil then db.options.hints = fresh end
     -- 0.9.14: the name in the middle of the ring is the only way now (was the option centerLabel).
     db.options.centerLabel = nil
-    -- 0.6.9 gamepad combinations took over their second button; replaced by ring macros
-    -- placed on Blizzard's gamepad bar combinations.
-    for _, ring in ipairs(type(db.rings) == "table" and db.rings or {}) do
-        if type(ring.padKey) == "string" and ring.padKey:find("+", 1, true) then
-            ring.padKey = nil
-            H.migrationNote = "Halo: gamepad combination cleared. Use Make macro"
-        end
-    end
+    -- (0.6.9 gamepad combinations were cleared here until 0.9.27; "A+B" is a chord ring now.)
     -- Old "Ring height" (0.x): the gamepad ring used to sit at the centre, shifted up/down.
     if db.options.padCenterY ~= nil then
         if tonumber(db.options.padCenterY) and db.options.padCenterY ~= 0 then
