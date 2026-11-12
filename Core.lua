@@ -4,7 +4,7 @@
 local ADDON, H = ...
 Halo = H
 
-H.version = C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version") or "0.9.25"
+H.version = C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version") or "0.9.26"
 H.MAX_SLICES = 12
 
 local DEFAULT_OPTIONS = {
@@ -102,7 +102,7 @@ local function Migrate(db)
     for _, ring in ipairs(type(db.rings) == "table" and db.rings or {}) do
         if type(ring.padKey) == "string" and ring.padKey:find("+", 1, true) then
             ring.padKey = nil
-            H.migrationNote = "Halo: gamepad combinations now use ring macros (ring editor, Macro button). Your combination was cleared."
+            H.migrationNote = "Halo: gamepad combination cleared. Use Make macro"
         end
     end
     -- Old "Ring height" (0.x): the gamepad ring used to sit at the centre, shifted up/down.
@@ -270,7 +270,7 @@ function H.CopyRing(id, owner)
         if value then
             local taken = KeyConflict(value)
             if taken then
-                notes[#notes + 1] = ("%s is already used by %s, so the copy has no %s."):format(
+                notes[#notes + 1] = ("%s taken by %s: copy has no %s"):format(
                     value, taken, field == "key" and "key" or "gamepad button")
             else
                 copy[field] = value
@@ -289,8 +289,8 @@ function H.CopyRing(id, owner)
         end
     end
     if dropped > 0 then
-        notes[#notes + 1] = ("%d nested %s belonging to another character %s left out."):format(
-            dropped, dropped == 1 and "ring" or "rings", dropped == 1 and "was" or "were")
+        notes[#notes + 1] = ("%d nested %s of another character left out"):format(
+            dropped, dropped == 1 and "ring" or "rings")
     end
     table.insert(H.db.rings, copy)
     H.Changed("rings")
@@ -371,7 +371,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
         if H.migrationNote then H.Print(H.migrationNote); H.migrationNote = nil end
         if not H.db.welcomed then
             H.db.welcomed = true
-            H.Print("Type /halo to give your rings a key.")
+            H.Print("/halo to set up rings")
         end
         H.RequestCompile()
     elseif event == "PLAYER_REGEN_ENABLED" then
@@ -402,10 +402,10 @@ SlashCmdList.HALO = function(message)
     if message == "debug" then
         H.debug = not H.debug
         H.db.debug = H.debug or nil
-        H.Print("debug", H.debug and "on (kept across /reload; the log is saved on /reload)" or "off")
+        H.Print("debug", H.debug and "on (log saved on /reload)" or "off")
         if H.debug then H.db.debugLog = {}; H.Log("debug on") end
     elseif message == "reset" then
-        H.Print("Type /halo reset yes to delete all rings and options.")
+        H.Print("/halo reset yes deletes all rings and options")
     elseif message == "reset yes" then
         local old = H.db
         HaloDB = Migrate({})
@@ -414,11 +414,11 @@ SlashCmdList.HALO = function(message)
         H.db.debug, H.db.debugLog = old.debug, old.debugLog
         H.Changed("rings")
         H.Fire("options")
-        H.Print("Rings and options reset.")
+        H.Print("Reset")
     elseif message == "rebuild" then
-        if InCombatLockdown() then H.Print("Try again outside combat."); return end
+        if InCombatLockdown() then H.Print("Not in combat"); return end
         local ok = H.RunCompile()
-        H.Print(ok and "Rebuilt." or "Rebuild failed, see the error above.")
+        H.Print(ok and "Rebuilt" or "Rebuild failed")
         if H.Status then H.Status() end
     elseif message == "camstate" then
         if H.CameraState then H.CameraState() end
@@ -426,7 +426,7 @@ SlashCmdList.HALO = function(message)
         if H.DumpTextures then H.DumpTextures() end
     elseif message == "layout a" or message == "layout b" then
         if H.SetOptionsLayout then H.SetOptionsLayout(message:sub(-1)) end
-        H.Print("Window layout " .. message:sub(-1):upper() .. ".")
+        H.Print("Layout " .. message:sub(-1):upper())
     elseif message == "status" then
         if H.Status then H.Status() end
     else

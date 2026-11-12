@@ -361,7 +361,7 @@ end
 
 function header:OnRingEmpty(rid)
     local ring = H.GetRing(rid)
-    UIErrorsFrame:AddMessage((ring and ring.name or "Ring") .. ": nothing to show right now.", 1, 0.82, 0)
+    UIErrorsFrame:AddMessage((ring and ring.name or "Ring") .. ": empty", 1, 0.82, 0)
 end
 
 -- Compile -------------------------------------------------------------------------------------
@@ -632,8 +632,8 @@ local function WarnConflicts()
                 local tag = key and (key .. ">" .. tostring(owner))
                 if owner and not warned[tag] then
                     warned[tag] = true
-                    H.Print(("%s does not open %s: %s uses that key. Pick another key, or free it in %s.")
-                        :format(GetBindingText and GetBindingText(key) or key, ring.name, owner, owner))
+                    H.Print(("%s taken by %s: %s won't open")
+                        :format(GetBindingText and GetBindingText(key) or key, owner, ring.name))
                 end
             end
         end

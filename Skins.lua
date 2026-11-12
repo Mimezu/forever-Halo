@@ -136,7 +136,7 @@ S.RuneTint = RuneTint
 
 -- Styles --------------------------------------------------------------------------------------
 S.list.A = {
-    id = "A", name = "Flyout", desc = "Forever's gamepad flyout. Dark disc, round slots, cursor arrow.",
+    id = "A", name = "Flyout", desc = "Dark disc, round slots",
     icon = 36, round = true, mask = "gamepad-flyout-circular-slot-mask", slot = 44,
     labelNudge = -3,   -- slice name 3px higher (player's request)
     centerText = { font = "GameFontHighlight", color = { 1, 1, 1 }, shadow = { 0, 0, 0, 1 }, offset = { 1, -1 } },
@@ -167,7 +167,7 @@ S.list.A = {
 }
 
 S.list.B = {
-    id = "B", name = "Action bar", desc = "Vanilla action buttons floating in a circle. All fade in together.",
+    id = "B", name = "Action bar", desc = "Action buttons in a circle",
     icon = 36, round = false, slot = 44,
     anim = "fade", openTime = 0.14,
     keyPoint = "TOPRIGHT", keyFont = "NumberFontNormalSmallGray",
@@ -195,7 +195,7 @@ S.list.B = {
 }
 
 S.list.C = {
-    id = "C", name = "Minimap", desc = "Minimap buttons in gold rings on a soft, blurred dark disc. Sweeps open like a compass.",
+    id = "C", name = "Minimap", desc = "Gold rings, blurred disc",
     icon = 34, round = true, slot = 46,
     labelNudge = 6,    -- slice name just under the enlarged pointed icon
     centerText = { font = "GameFontNormal", color = { 1, 0.82, 0 }, shadow = { 0, 0, 0, 0.9 }, offset = { 1, -1 } },
@@ -248,7 +248,7 @@ S.list.C = {
 }
 
 S.list.D = {
-    id = "D", name = "Runes", desc = "A keystone rune circle that slowly turns. Flyout slots, glowing hover.",
+    id = "D", name = "Runes", desc = "Turning rune circle",
     icon = 36, round = true, mask = "gamepad-flyout-circular-slot-mask", slot = 44,
     slotRadius = 0.85,   -- icons sit a little inside the rune circle (the circle keeps its size)
     -- Pale rune-coloured text (blue, or the chosen colour lifted toward white).
@@ -346,7 +346,7 @@ local function PortraitRingSpec()
 end
 
 S.list.E = {
-    id = "E", name = "Parchment", desc = "A round parchment with gilded portrait rings. Unfolds when it opens.",
+    id = "E", name = "Parchment", desc = "Parchment, gilded rings",
     -- Icon flush in the ring: Blizzard fits a 44px portrait in this ring at native size,
     -- ~40px at our 48px ring. zoom trims the icon's baked square bevel off the edge.
     icon = 40, zoom = 0.08, round = true, slot = 48,

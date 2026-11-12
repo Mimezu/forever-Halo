@@ -2,7 +2,7 @@
 ## Title: Halo
 ## Notes: Small radial menus for potions, mounts, pets and other quick actions. Keyboard, mouse and gamepad.
 ## Author: Mimezu
-## Version: 0.9.25
+## Version: 0.9.26
 ## SavedVariables: HaloDB
 ## OptionalDeps: FrameGambit
 ## AddonCompartmentFunc: Halo_OpenOptions

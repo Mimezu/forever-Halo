@@ -135,8 +135,7 @@ end
 function H.LayoutSwitch(parent, get, set)
     local group = Choice(parent, { { "A", "a" }, { "B", "b" } }, get, set)
     for i, cell in ipairs(group.cells) do
-        Tip(cell, i == 1 and "Layout A" or "Layout B", i == 1 and "The classic window." or
-            "The redesigned window: tidier rows, a bigger ring, a slice inspector. Same settings as A; switch back any time. Also /halo layout a or b.")
+        Tip(cell, i == 1 and "Layout A" or "Layout B", i == 1 and "Classic" or "Redesigned")
     end
     return group
 end
@@ -300,52 +299,50 @@ function H.BuildOptionsB(page, K)
 
     local open = left:Card("Mouse and keyboard")
     open:Seg("Open rings at", { { "Mouse cursor", "cursor" }, { "Fixed position", "center" } }, Opt("openAt"), SetOpt("openAt"),
-        { tip = { "Open rings at", "Mouse cursor: the ring opens around the pointer. Fixed position: always at the same place on screen." } })
+        {})
     open:Buttons("Position", {
         { "Place", function() H.PlaceRing("centerPos", "Fixed position ring") end },
         { "Reset", function() H.SetOption("centerPos", { 0.5, 0.5 }) end },
-    }, { indent = true, when = function() return H.Option("openAt") == "center" end,
-         tip = { "Fixed position", "Where rings open. Place shows the ring on screen: drag it, then click Done." } })
+    }, { indent = true, when = function() return H.Option("openAt") == "center" end, })
     open:Step("Size", function() return math.floor((tonumber(H.Option("scale")) or 1) * 100 + 0.5) .. "%" end, function(delta)
         local v = math.floor(((tonumber(H.Option("scale")) or 1) + delta * 0.1) * 10 + 0.5) / 10
         H.SetOption("scale", math.max(0.6, math.min(1.6, v)))
         K.Refresh(2)
-    end, { tip = { "Size", "Makes every ring bigger or smaller." } })
+    end, {})
 
     local pad = left:Card("Gamepad")
     pad:Seg("Point with", { { "Right stick", "right" }, { "Left stick", "left" } }, Opt("stick"), SetOpt("stick"))
     pad:Seg("Ring button", { { "Hold", "hold" }, { "Tap", "tap" } }, Opt("padMode"), SetOpt("padMode"), { tips = {
-        { "Hold", "Hold the button, point, let go: the slice is used." },
-        { "Tap", "Tap to open, point, tap again to use (tap with the stick centred closes). L1, R1, L2, R2 and A also use the slice." },
+        { "Hold", "Release to use" },
+        { "Tap", "Tap again to use" },
     } })
     pad:Seg("Stick released", { { "Keep", "keep" }, { "Use", "use" } }, function() return H.StickRelease() end, SetOpt("padRelease"), { tips = {
-        { "Stick released: Keep", "The slice you pointed at stays selected when you let go of the stick. Use it with the ring button, L1, R1, L2, R2 or A. Works in combat too." },
-        { "Stick released: Use", "Point at a slice and let go of the stick: the slice is used, like Blizzard's own radial menus. Works in combat too. To close without using anything, press the ring's button again (Tap) or B before you let go." },
+        { "Stick released: Keep", "Slice stays selected" },
+        { "Stick released: Use", "Uses the slice" },
     } })
     local function StillLabel()
-        return H.Option("stick") == "left" and "Stop walking while pointing" or "Keep the camera still while pointing"
+        return H.Option("stick") == "left" and "Hold walking" or "Hold camera"
     end
-    pad:Check(StillLabel(), Opt("holdCamera"), SetOpt("holdCamera"), { width = half - 50, label = StillLabel,
-        tip = { "Block the pointing stick", "While a ring is open the stick you point with does nothing else: the camera with the right stick (you can still walk), walking with the left stick (the camera still turns)." } })
+    pad:Check(StillLabel(), Opt("holdCamera"), SetOpt("holdCamera"), { width = half - 50, label = StillLabel })
     pad:Check("Block both sticks", Opt("blockSticks"), SetOpt("blockSticks"), { width = half - 50,
-        tip = { "Block both sticks", "While a ring is open both sticks go to the ring: no walking and no camera. Use it if the option above does not hold the stick." } })
+        tip = { "Block both sticks", "No walking, no camera" } })
     pad:Buttons("Position", {
         { "Place", function() H.PlaceRing("padPos", "Gamepad ring") end },
         { "Reset", function() H.SetOption("padPos", { 0.78, 0.42 }) end },
-    }, { tip = { "Gamepad ring position", "Where gamepad rings open. Place shows the ring on screen: drag it, then click Done." } })
+    }, {})
 
     local behave = right:Card("While a ring is open")
     behave:Check("Show ring and slice names", Opt("labels"), SetOpt("labels"), { width = half - 50 })
     behave:Check("Show help under the ring", Opt("hints"), SetOpt("hints"), { width = half - 50 })
-    behave:Check("Keys 1-9 and 0 use a slice", Opt("numberKeys"), SetOpt("numberKeys"), { width = half - 50,
-        tip = { "Number keys", "While a ring is open, the keyboard keys 1-9 and 0 use slices 1 to 10." } })
+    behave:Check("Number keys", Opt("numberKeys"), SetOpt("numberKeys"), { width = half - 50,
+        tip = { "Number keys", "1-9, 0" } })
     behave:Check("Show slice numbers", Opt("slotNumbers"), SetOpt("slotNumbers"), { width = half - 70, indent = true,
         when = function() return H.Option("numberKeys") == true end,
-        tip = { "Show slice numbers", "The small numbers on the slices. The number keys work either way. Keyboard only: the gamepad does not use them." } })
+        tip = { "Show slice numbers", "Keyboard only" } })
     behave:Check("Ring background", Opt("background"), SetOpt("background"), { width = 130 })
     behave:Check("Sounds", Opt("sounds"), SetOpt("sounds"), { width = 100, same = true })
 
-    local how = right:Card("How to use")
+    local how = right:Card("Controls")
     how:Note(H.HelpText)
 
     return function() sheet:Update() end
@@ -357,14 +354,14 @@ function H.BuildRingsB(page, K)
     local LIST_W = K.LIST_W
     local list = K.RingList(page, 0, 0, LIST_W, Hh - 30, { tidy = true })
     Tip(K.Button(page, "+  New ring", 0, -(Hh - 24), LIST_W, K.NewRing), "New ring",
-        "Makes an empty ring. Give it a key, then fill it.")
+        nil)
 
     local EX = LIST_W + 14
     local EW = W_ - EX
     local editor = CreateFrame("Frame", nil, page)
     editor:SetPoint("TOPLEFT", EX, 0)
     editor:SetSize(EW, Hh)
-    local empty = K.Note(page, "No rings yet. Click New ring to make one.", EX + 20, -40, EW - 40)
+    local empty = K.Note(page, "No rings", EX + 20, -40, EW - 40)
 
     -- Header line: icon, name, Only this character, ... menu.
     local ringIcon = K.RoundIcon(editor, 36)
@@ -377,14 +374,14 @@ function H.BuildRingsB(page, K)
     end)
     nameBox:SetFontObject("GameFontHighlightLarge")
     function nameBox:Reset() local ring = K.CurrentRing(); self:SetText(ring and ring.name or "") end
-    Tip(nameBox, "Name", "Click to rename the ring. Enter keeps it, Esc goes back.")
+    Tip(nameBox, "Name", "Enter: keep · Esc: undo")
     local mine = K.Check(editor, "Only this character", 262, -6,
         function() local r = K.CurrentRing(); return r and r.owner ~= nil end,
         function(on)
             local r = K.CurrentRing()
             if r then H.SetRingOwner(r, on and H.CharacterKey() or nil); H.Changed("owner") end
         end, 140)
-    Tip(mine, "Only this character", "Other characters do not use this ring and its keys. They can still see it under this character's folder and copy it.")
+    Tip(mine, "Only this character", "Others can still copy it")
     local more = K.Button(editor, "...", EW - 36, -6, 36, nil, 24)
     more:SetScript("OnClick", function(self)
         local ring = K.CurrentRing()
@@ -393,16 +390,16 @@ function H.BuildRingsB(page, K)
             { title = ring.name },
             { text = "Duplicate", func = function() K.CopyCurrent(ring.owner, "here") end },
             { text = "Make macro", func = K.MakeRingMacro },
-            { note = "Opens the ring from a gamepad bar slot." },
+            { note = "For gamepad bars" },
             { divider = true },
             { text = "Delete ring", items = {
                 { title = "Delete " .. ring.name .. "?" },
-                { text = "Yes, delete it", func = K.DeleteCurrent },
-                { note = "This cannot be undone." },
+                { text = "Delete", func = K.DeleteCurrent },
+                { note = "Can't be undone" },
             } },
         })
     end)
-    Tip(more, "More", "Duplicate, make a macro for gamepad bars, or delete this ring.")
+    Tip(more, "More")
     local rule = editor:CreateTexture(nil, "BORDER")
     rule:SetPoint("TOPLEFT", 0, -40); rule:SetSize(EW, 1)
     rule:SetColorTexture(0.68, 0.50, 0.26, 0.25)
@@ -410,13 +407,13 @@ function H.BuildRingsB(page, K)
     -- Keys and style on one line; what they clash with on the line under it.
     K.Text(editor, "Key", 0, -53, "GameFontNormal")
     local keyButton = K.KeyCapture(editor, 32, -48, 120, "key")
-    Tip(keyButton, "Key", "Click, then press a key or mouse button (with Shift, Ctrl or Alt if you like). Backspace clears it.")
+    Tip(keyButton, "Key", "Backspace: clear")
     K.Text(editor, "Gamepad", 166, -53, "GameFontNormal")
     local padButton = K.KeyCapture(editor, 232, -48, 110, "padKey")
-    Tip(padButton, "Gamepad button", "Click, then press a gamepad button. Backspace clears it. For combinations like R1 + D-pad down, use Make macro in the ... menu and put the macro on that slot of your gamepad bars.")
+    Tip(padButton, "Gamepad button", "Backspace: clear. Combos: Make macro")
     K.Text(editor, "Style", 356, -53, "GameFontNormal")
     local styleButton = K.Button(editor, "Default", 394, -48, EW - 394, K.StyleMenu, 24)
-    Tip(styleButton, "Style", "How this ring looks. Default follows the Styles tab.")
+    Tip(styleButton, "Style", "Default follows the Styles tab")
     local keyNote = K.Note(editor, "", 0, -78, EW)
     keyNote:SetWordWrap(false)
     local keyNoteHit = CreateFrame("Frame", nil, editor)
@@ -450,8 +447,8 @@ function H.BuildRingsB(page, K)
     local BW = IW - 20
     local back = K.Button(sel, "Earlier", 10, -56, (BW - 4) / 2, function() K.MoveSlice(-1) end)
     local fwd = K.Button(sel, "Later", 10 + (BW + 4) / 2, -56, (BW - 4) / 2, function() K.MoveSlice(1) end)
-    Tip(back, "Earlier", "Moves the slice one place anticlockwise. You can also drag it on the ring.")
-    Tip(fwd, "Later", "Moves the slice one place clockwise. You can also drag it on the ring.")
+    Tip(back, "Earlier")
+    Tip(fwd, "Later")
     local edit = K.Button(sel, "Edit macro", 10, -82, BW, function()
         local ring, i = K.CurrentRing(), select(2, K.Selected())
         local s = ring and i and ring.slices[i]
@@ -463,20 +460,20 @@ function H.BuildRingsB(page, K)
     guide:SetAllPoints()
     K.Text(guide, "Fill the ring", 10, -10, "GameFontNormal")
     local guideText = K.Note(guide,
-        "|cffffd100+|r  Click the middle of the ring for emotes, markers, lists, other rings and macros.\n\n" ..
-        "|cffffd100Drop|r  spells, items, mounts, toys, pets or macros on the ring.\n\n" ..
-        "|cffffd100Drag|r  a slice to move it. Click to select, right-click to remove.", 10, -32, BW)
+        "|cffffd100+|r  Emotes, markers, lists, macros\n\n" ..
+        "|cffffd100Drop|r  Spells, items, mounts, pets\n\n" ..
+        "|cffffd100Drag|r  Move a slice", 10, -32, BW)
     guideText:SetSpacing(2)
 
     local ringCard = K.Card(editor, "This ring", IX, -(BODY_Y + SLICE_H + 8), IW, BODY_H - SLICE_H - 8)
     local hide = K.Check(ringCard, "Hide what you can't use", 8, -32,
         function() local r = K.CurrentRing(); return r and r.hideMissing end,
         function(on) local r = K.CurrentRing(); if r then r.hideMissing = on; H.Changed("hide") end end, IW - 44)
-    Tip(hide, "Hide what you can't use now", "Leaves out spells you have not learned and items that are not in your bags. The ring updates outside combat.")
+    Tip(hide, "Hide what you can't use", "Updates out of combat")
     local tips = K.Check(ringCard, "Show tooltips", 8, -56,
         function() local r = K.CurrentRing(); return r and r.tooltips end,
         function(on) local r = K.CurrentRing(); if r then r.tooltips = on or nil; H.Changed("tooltips") end end, IW - 44)
-    Tip(tips, "Show tooltips", "Shows the game tooltip of the slice you point at, beside the ring.")
+    Tip(tips, "Show tooltips")
     K.Text(ringCard, "Spacing", 14, -92, "GameFontHighlight")
     local spacing = StepGroup(ringCard, IW - 114, -88, 52, function(delta)
         local r = K.CurrentRing()
@@ -486,7 +483,7 @@ function H.BuildRingsB(page, K)
         r.spread = v ~= 1 and v or nil
         H.Changed("spacing")
     end)
-    Tip(spacing.group, "Spacing", "Moves the slices further apart or closer together. Icons keep their size.")
+    Tip(spacing.group, "Spacing", "Icons keep their size")
 
     local foreign = K.ForeignBar(editor, EW)
     local macroPanel = K.MacroEditorPanel(editor, 0, -BODY_Y, EW, BODY_H)

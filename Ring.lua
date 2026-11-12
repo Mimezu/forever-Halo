@@ -376,10 +376,10 @@ end
 local function HintText()
     if not state.sticky then return "" end
     if state.padUI then
-        if H.StickRelease() == "use" then return "Point with the stick and let go. Ring button or B: cancel" end
-        return "Tilt the stick and press the confirm button"
+        if H.StickRelease() == "use" then return "Release: use · B: cancel" end
+        return "A: use · B: close"
     end
-    return "Click a slice. Click the middle or press Esc to close."
+    return "Esc: close"
 end
 
 -- Game tooltip for the pointed slice, beside the ring (per-ring setting).
@@ -663,7 +663,7 @@ hiddenWatch:SetScript("OnUpdate", function(self)
         hiddenCentred = Side().isCentered
         if H.db and not H.db.hiddenAxisReceives then
             H.db.hiddenAxisReceives = true
-            H.Print("Keeping the camera still in combat does not work in this game version. Halo turned it off.")
+            H.Print("Combat camera hold unsupported: turned off")
             H.Log("hidden stick listener still receives the camera stick: combat camera hold turned off")
         end
     end

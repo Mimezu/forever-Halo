@@ -45,16 +45,16 @@ H.MARKERS = { "Star", "Circle", "Diamond", "Triangle", "Moon", "Square", "Cross"
 
 -- Auto sources: filled from bags or collections whenever Halo rebuilds (out of combat).
 H.AUTO = {
-    { "potions", "Potions", "Interface\\Icons\\INV_Potion_54", "Healthstones and potions in your bags, healthstones first." },
-    { "elixirs", "Elixirs and flasks", "Interface\\Icons\\INV_Potion_45", "Elixirs and flasks in your bags." },
+    { "potions", "Potions", "Interface\\Icons\\INV_Potion_54", "Healthstones first" },
+    { "elixirs", "Elixirs and flasks", "Interface\\Icons\\INV_Potion_45", nil },
     { "food", "Food and drink", "Interface\\Icons\\INV_Misc_Food_15",
-        "The best food in your bags, and beside it the best drink if your class uses mana." },
-    { "bandages", "Bandages", "Interface\\Icons\\INV_Misc_Bandage_15", "One slice: the best bandage in your bags that you can use." },
-    { "scrolls", "Scrolls", "Interface\\Icons\\INV_Scroll_02", "Scrolls in your bags." },
+        "Drink only for mana classes" },
+    { "bandages", "Bandages", "Interface\\Icons\\INV_Misc_Bandage_15", "Best usable one" },
+    { "scrolls", "Scrolls", "Interface\\Icons\\INV_Scroll_02", nil },
     { "mounts", "Favourite mounts", "Interface\\Icons\\Ability_Mount_RidingHorse",
-        "Your favourite mounts that can be used here. With no favourites, all your mounts." },
+        "No favourites: all mounts" },
     { "pets", "Favourite pets", "Interface\\Icons\\INV_Box_PetCarrier_01",
-        "Your favourite companion pets." },
+        nil },
 }
 local AUTO_BY_ID = {}
 for _, a in ipairs(H.AUTO) do AUTO_BY_ID[a[1]] = a end
@@ -339,9 +339,9 @@ K.auto = {
     tooltip = function(s, tip)
         local a = AUTO_BY_ID[s.source]
         tip:AddLine(a and a[2] or "Automatic", 1, 1, 1)
-        if a then tip:AddLine(a[4], 1, 0.82, 0, true) end
+        if a and a[4] then tip:AddLine(a[4], 1, 0.82, 0, true) end
         if s.source ~= "food" and s.source ~= "bandages" then   -- those hold one best item each
-            tip:AddLine("Fills in by itself, up to the ring's 12 slices.", 0.75, 0.75, 0.75, true)
+            tip:AddLine("Up to 12 slices", 0.75, 0.75, 0.75, true)
         end
     end,
 }

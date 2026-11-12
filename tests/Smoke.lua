@@ -734,18 +734,18 @@ do
         return H.HelpText()
     end
     local t = help({ openAt = "cursor", numberKeys = true, padMode = "hold", padRelease = "keep", stick = "right", holdCamera = true, blockSticks = false })
-    check(t:find("or press 1-9, 0", 1, true) and t:find("Hold the button", 1, true)
-        and t:find("right stick", 1, true) and t:find("The stick keeps the pick", 1, true) and t:find("Let go of the button to use it", 1, true)
-        and t:find("The camera stays still", 1, true), "help: hold, keep, right stick, camera")
+    check(t:find("Click or 1-9, 0: use", 1, true)
+        and t:find("Right stick", 1, true) and t:find("Release button: use", 1, true)
+        and t:find("Camera held", 1, true), "help: hold, keep, right stick, camera")
     t = help({ openAt = "center", numberKeys = false, padMode = "tap", padRelease = "use", stick = "left" })
-    check(not t:find("1-9", 1, true) and t:find("Tap the button", 1, true)
-        and t:find("left stick", 1, true) and t:find("Let go of the stick to use it", 1, true)
-        and t:find("Walking stops", 1, true) and not t:find("camera stays still", 1, true), "help: tap, use, left stick, walking")
+    check(not t:find("1-9", 1, true)
+        and t:find("Left stick", 1, true) and t:find("Release stick or tap: use", 1, true)
+        and t:find("Walking held", 1, true) and not t:find("Camera held", 1, true), "help: tap, use, left stick, walking")
     t = help({ padMode = "tap", padRelease = "keep", blockSticks = true })
-    check(t:find("The stick keeps the pick", 1, true) and t:find("Tap again to use it", 1, true) and t:find("Both sticks are blocked", 1, true) and not t:find("Walking stops", 1, true),
+    check(t:find("Tap: use", 1, true) and t:find("Both sticks blocked", 1, true) and not t:find("Walking held", 1, true),
         "help: keep, both sticks")
     t = help({ holdCamera = false, blockSticks = false })
-    check(not t:find("blocked", 1, true) and not t:find("Walking stops", 1, true) and not t:find("camera stays", 1, true), "help: no stick line when off")
+    check(not t:find("blocked", 1, true) and not t:find("held", 1, true), "help: no stick line when off")
     check(select(2, help({ padMode = "hold", padRelease = "use", holdCamera = true }):gsub("\n", "\n")) <= 10, "help stays short")
     help({ openAt = "cursor", numberKeys = true, padMode = "hold", padRelease = "keep", stick = "right", holdCamera = true, blockSticks = false })
 end
@@ -1074,7 +1074,7 @@ do
     check(P.IsOpen() and P.panels[1].shown and P.catcher.shown, "the Add menu opens on a Halo panel over a click catcher")
     check(P.panels[1].legacyRim ~= nil, "the panel has the Legacy rim (a finished edge)")
     for _, text in ipairs({ "Add to Menu ring", "Automatic", "Emote", "Target marker", "Another ring", "Custom macro...",
-        "Or drag a spell, item, mount, toy, pet", "or macro onto the ring." }) do
+        "Or drop a spell or item" }) do
         check(rowNamed(1, text), "Add menu entry: " .. text)
     end
     check(not rowNamed(1, "Equipment set"), "no equipment sets here")
@@ -1161,8 +1161,8 @@ do
     check(P.IsOpen() and rowNamed(1, "B ring") and rowNamed(1, "Duplicate") and rowNamed(1, "Make macro"), "the ... menu lists the ring's actions")
     local del = rowNamed(1, "Delete ring")
     del.scripts.OnClick(del)
-    check(H.GetRing(bRing.id) and rowNamed(2, "Yes, delete it"), "Delete asks first")
-    local yes = rowNamed(2, "Yes, delete it")
+    check(H.GetRing(bRing.id) and rowNamed(2, "Delete"), "Delete asks first")
+    local yes = rowNamed(2, "Delete")
     yes.scripts.OnClick(yes); advance(1)
     check(not H.GetRing(bRing.id) and not P.IsOpen(), "confirming deletes the ring")
     -- Options page: rows fold with their switch; both states refresh.
