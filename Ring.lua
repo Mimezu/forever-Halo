@@ -406,6 +406,8 @@ local function SetPick(i)
     if state.pick == i then return end
     if state.pick and slots[state.pick] then slots[state.pick].over:Hide() end
     state.pick = i
+    -- (others listen: Gamepad Companion's rumble on a slot change)
+    if i then H.Fire("pick", i) end
     local showLabels = H.Option("labels")
     if i and slots[i] then
         slots[i].over:Show()

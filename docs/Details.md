@@ -135,6 +135,10 @@ Starter rings (no keys): Supplies, Travel, Emotes.
   combat) Halo switches `GamePadStickAxisButtons` off and back on when it closes. In combat that is
   not attempted, so those radials do not work in combat.
 
+- Other addons can listen with `Halo.On(kind, fn)`: `open` and `switch` (a ring opens or another
+  takes its place), `pick` (the pointed slice changes), `close` (the slice used, or nil). Gamepad
+  Companion's rumble uses them.
+
 No OPie code or art is used (OPie is all rights reserved); only the interaction ideas.
 
 ## Tests
