@@ -8,7 +8,7 @@ Put the `Halo` folder in `World of Warcraft\_forever_\Interface\AddOns\`.
 
 ## Use
 
-- `/halo` opens the window. Starter rings: Supplies, Travel, Emotes.
+- `/halo`, the minimap icon or the **Open Halo** key (Options) opens the window. Starter rings: Supplies, Travel, Emotes.
 - **New ring**, then set a **Key** or **Gamepad** button.
 - Drop spells, items, mounts, toys, pets or macros on the ring. **+** adds emotes, markers, lists, other rings, macros.
 - Drag a slice to move it. Right-click removes it.

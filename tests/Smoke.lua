@@ -197,6 +197,17 @@ function CreateFrame(kind, name, parent, template)
     frames[#frames + 1] = frame
     return frame
 end
+-- The game's own key bindings (Bindings.xml actions), saved with SaveBindings.
+local keyBinds, bindingsSaved = {}, 0
+function GetBindingKey(action)
+    local found = {}
+    for key, a in pairs(keyBinds) do if a == action then found[#found + 1] = key end end
+    table.sort(found)
+    return unpack(found)
+end
+function SetBinding(key, action) keyBinds[key] = action end
+function SaveBindings() bindingsSaved = bindingsSaved + 1 end
+function GetCurrentBindingSet() return 1 end
 -- key -> owner of the most recent override and its action (the most recent one wins in game)
 bindOrder, bindTop = {}, {}
 function ClearOverrideBindings(owner)
@@ -212,10 +223,15 @@ function SetOverrideBinding(owner, _, key, action)
     if action and action ~= "" then bindOrder[key], bindTop[key] = owner, action
     elseif bindOrder[key] == owner then bindOrder[key], bindTop[key] = nil, nil end   -- clearing removes its own
 end
-function GetBindingAction(key, checkOverride) return checkOverride and bindTop[key] or "" end
+function GetBindingAction(key, checkOverride)
+    if checkOverride then return bindTop[key] or keyBinds[key] or "" end
+    return keyBinds[key] or ""
+end
 UIParent, WorldFrame = Mock("UIParent"), Mock("WorldFrame")
 GameTooltip = Mock("GameTooltip")
-Settings ={ RegisterCanvasLayoutCategory = function() return {} end, RegisterAddOnCategory = function() end }
+local settingsPanel
+Settings ={ RegisterCanvasLayoutCategory = function(panel) settingsPanel = panel; return {} end, RegisterAddOnCategory = function() end }
+Minimap = Mock("Minimap")
 
 -- Blizzard's gamepad stick listener (Blizzard_GamepadSharedUtility), as a plain table fake.
 inputBindingAxisListener = { left = {}, right = {}, stickOn = false, shown = true,
@@ -236,7 +252,8 @@ for file in toc:gmatch("\n([%w_]+%.lua)") do
 end
 check(#frames > 0, "files loaded")
 local allowed = { Halo = true, SLASH_HALO1 = true, Halo_OpenOptions = true, HaloHeader = true, HaloButton = true,
-    HaloKeys = true, HaloBindings = true, HaloRing = true, HaloStick = true, HaloStickCatcher = true }
+    HaloKeys = true, HaloBindings = true, HaloRing = true, HaloStick = true, HaloStickCatcher = true,
+    BINDING_HEADER_HALO = true, BINDING_NAME_HALO_TOGGLE = true, HaloMinimapButton = true }
 for k in pairs(_G) do
     if not before[k] then check(allowed[k], "unexpected global: " .. tostring(k)) end
 end
@@ -1457,5 +1474,78 @@ do
     bags[0], C_Item.GetItemInfoInstant, C_Item.GetItemSpell, C_Item.GetDetailedItemLevelInfo,
         C_Item.GetItemInfo, C_Item.IsUsableItem, C_Item.GetItemCount, UnitLevel, UnitClass = unpack(saved, 1, 9)
     advance(1)
+end
+-- Ways in: window key, minimap button, Blizzard Settings page ----------------------------------------
+do
+    check(BINDING_NAME_HALO_TOGGLE == "Open Halo" and BINDING_HEADER_HALO == "Halo", "binding names")
+    local xml = io.open("Bindings.xml"):read("*a")
+    check(xml:find('name="HALO_TOGGLE"', 1, true) and xml:find("Halo_OpenOptions()", 1, true), "Bindings.xml: toggle")
+    -- Minimap button: built at login, shown by default, toggle saved.
+    local mini = H.MinimapButton()
+    check(mini and mini == HaloMinimapButton and mini.shown, "minimap button shown by default")
+    check(H.MinimapShown() == true, "minimap: shown")
+    H.SetMinimapShown(false)
+    check(not mini.shown and H.db.minimap.hide == true and not H.MinimapShown(), "minimap: hidden and saved")
+    H.SetMinimapShown(true)
+    check(mini.shown and H.db.minimap.hide == nil, "minimap: shown again")
+    cursorX, cursorY = 500, 500       -- straight above the minimap's centre (500, 400)
+    mini.scripts.OnDragStart(mini); mini.scripts.OnUpdate(mini); mini.scripts.OnDragStop(mini)
+    check(math.abs(H.db.minimap.angle - 90) < 0.01, "minimap: dragged position saved: " .. tostring(H.db.minimap.angle))
+    check(mini.scripts.OnUpdate == nil, "minimap: drag ends")
+    cursorX, cursorY = nil, nil
+    local wasShown = HaloOptions and HaloOptions:IsShown()
+    mini.scripts.OnClick(mini)
+    check(HaloOptions:IsShown() ~= wasShown, "minimap click toggles the window")
+    if HaloOptions:IsShown() then H.ToggleOptions() end
+
+    -- Window key: bound, saved, ring keys refused, combat refused.
+    keyBinds["CTRL-H"] = "TOGGLEBAG1"
+    local saves = bindingsSaved
+    check(H.SetWindowKey("CTRL-H") and H.WindowKey() == "CTRL-H" and bindingsSaved == saves + 1, "window key set and saved")
+    check(H.SetWindowKey("CTRL-J") and H.WindowKey() == "CTRL-J" and keyBinds["CTRL-H"] == nil, "a new key replaces the old one")
+    local ring = H.NewRing("Keyed"); ring.key = "CTRL-K"
+    check(not H.SetWindowKey("CTRL-K") and H.WindowKey() == "CTRL-J", "a ring's key is refused")
+    H.DeleteRing(ring.id)
+    combat = true
+    check(not H.SetWindowKey("CTRL-L") and H.WindowKey() == "CTRL-J", "refused in combat")
+    combat = false
+    check(H.SetWindowKey(nil) and H.WindowKey() == nil, "cleared")
+
+    -- Keycap: click to listen, the next key binds; Esc cancels; Backspace clears.
+    local cap = H.WindowKeyCap(UIParent, 100)
+    check(cap:GetText() == "Not set", "keycap: not set")
+    cap.scripts.OnClick(cap, "LeftButton")
+    check(cap:GetText() == "Press a key", "keycap: listening")
+    cap.scripts.OnKeyDown(cap, "LSHIFT")
+    check(cap.scripts.OnKeyDown, "keycap: a modifier alone keeps listening")
+    cap.scripts.OnKeyDown(cap, "F7")
+    check(H.WindowKey() == "F7" and cap:GetText() == "F7" and not cap.scripts.OnKeyDown, "keycap: key bound")
+    cap.scripts.OnClick(cap, "LeftButton"); cap.scripts.OnKeyDown(cap, "ESCAPE")
+    check(H.WindowKey() == "F7" and cap:GetText() == "F7", "keycap: Esc cancels")
+    cap.scripts.OnClick(cap, "LeftButton"); cap.scripts.OnClick(cap, "Button4")
+    check(H.WindowKey() == "BUTTON4", "keycap: mouse button 4")
+    cap.scripts.OnClick(cap, "LeftButton"); cap.scripts.OnKeyDown(cap, "BACKSPACE")
+    check(H.WindowKey() == nil, "keycap: Backspace clears")
+    combat = true
+    cap.scripts.OnClick(cap, "LeftButton")
+    check(not cap.scripts.OnKeyDown, "keycap: not in combat")
+    combat = false
+
+    -- Settings page: Open, the key and the minimap switch.
+    check(settingsPanel, "Settings page registered")
+    local openButton, minimapCheck
+    for _, f in ipairs(frames) do
+        if f.template == "UIPanelButtonTemplate" and f.text == "Open" then openButton = f end
+        if f.template == "UICheckButtonTemplate" and f.Text.text == "Minimap icon" then minimapCheck = minimapCheck or f end
+    end
+    check(openButton, "Settings: Open button")
+    openButton.scripts.OnClick(openButton)
+    check(HaloOptions:IsShown(), "Settings: Open opens the window")
+    H.ToggleOptions()
+    check(minimapCheck, "Minimap icon switch")
+    minimapCheck:SetChecked(false); minimapCheck.scripts.OnClick(minimapCheck)
+    check(not H.MinimapShown() and not mini.shown, "minimap switch off")
+    minimapCheck:SetChecked(true); minimapCheck.scripts.OnClick(minimapCheck)
+    check(H.MinimapShown() and mini.shown, "minimap switch on")
 end
 print(("Halo smoke (with audit checks): %d checks passed"):format(assertions))

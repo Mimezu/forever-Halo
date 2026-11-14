@@ -197,6 +197,7 @@ local function WithModifiers(key)
     if IsMetaKeyDown and IsMetaKeyDown() then prefix = prefix .. "META-" end
     return prefix .. key
 end
+H.WithModifiers = WithModifiers
 
 -- A button that captures the next key (field "key") or gamepad button (field "padKey").
 local capturing
@@ -234,6 +235,7 @@ local function KeyCapture(parent, x, y, width, field)
         end
         if capturing then Stop(capturing) end
         if mouse ~= "LeftButton" then return end
+        if H.StopWindowKeyCapture then H.StopWindowKeyCapture() end
         capturing = self
         self:SetText(field == "padKey" and "Press a gamepad button" or "Press a key")
         self:EnableKeyboard(true)
@@ -280,6 +282,7 @@ captureGuard:RegisterEvent("PLAYER_REGEN_DISABLED")
 captureGuard:SetScript("OnEvent", function()
     if capturing then capturing:StopCapture() end
 end)
+function H.StopRingKeyCapture() if capturing then capturing:StopCapture() end end
 
 -- Slice editing helpers ---------------------------------------------------------------------------
 local function CurrentRing() return selectedRing and H.GetRing(selectedRing) end
@@ -1352,21 +1355,29 @@ local function BuildOptions(page)
     local TOP_H, BOTTOM_H = 172, 224
     local BOTTOM_Y = -(TOP_H + 12)
     local open = Card(page, "Mouse and keyboard", 0, 0, half, TOP_H)
-    Text(open, "Open rings at", LABEL_X, -50, "GameFontHighlight")
-    local at = Segmented(open, CTRL_X, -46, BTN_W, { { "Mouse cursor", "cursor" }, { "Fixed position", "center" } },
+    Text(open, "Open rings at", LABEL_X, -46, "GameFontHighlight")
+    local at = Segmented(open, CTRL_X, -42, BTN_W, { { "Mouse cursor", "cursor" }, { "Fixed position", "center" } },
         function() return H.Option("openAt") end, function(v) H.SetOption("openAt", v) end)
     updaters[#updaters + 1] = function() at:Update() end
-    Text(open, "Size", LABEL_X, -88, "GameFontHighlight")
-    local size = Stepper(open, CTRL_X, -84, 60, function(delta)
+    Text(open, "Size", LABEL_X, -78, "GameFontHighlight")
+    local size = Stepper(open, CTRL_X, -74, 60, function(delta)
         local v = math.floor(((tonumber(H.Option("scale")) or 1) + delta * 0.1) * 10 + 0.5) / 10
         H.SetOption("scale", math.max(0.6, math.min(1.6, v)))
         pageRefresh[2]()
     end)
     updaters[#updaters + 1] = function() size.value:SetText(math.floor((tonumber(H.Option("scale")) or 1) * 100 + 0.5) .. "%") end
-    Text(open, "Fixed position", LABEL_X, -126, "GameFontHighlight")
-    local centerPlace = Button(open, "Place", CTRL_X, -122, BTN_W, function() H.PlaceRing("centerPos", "Fixed position ring") end)
-    Button(open, "Reset", BTN_2, -122, BTN_W, function() H.SetOption("centerPos", { 0.5, 0.5 }) end)
+    Text(open, "Fixed position", LABEL_X, -110, "GameFontHighlight")
+    local centerPlace = Button(open, "Place", CTRL_X, -106, BTN_W, function() H.PlaceRing("centerPos", "Fixed position ring") end)
+    Button(open, "Reset", BTN_2, -106, BTN_W, function() H.SetOption("centerPos", { 0.5, 0.5 }) end)
     Tooltip(centerPlace, "Fixed position")
+    -- The Halo window: its key (saved with the game's key bindings) and the minimap icon.
+    Text(open, "Open Halo", LABEL_X, -142, "GameFontHighlight")
+    local windowKey = H.WindowKeyCap(open, BTN_W)
+    windowKey:SetPoint("TOPLEFT", CTRL_X, -138)
+    if skin then skin.Button(windowKey) end
+    Tooltip(windowKey, "Open Halo", "Esc cancels · Backspace clears")
+    local minimap = Check(open, "Minimap icon", BTN_2, -136, H.MinimapShown, H.SetMinimapShown, half - BTN_2 - 34)
+    updaters[#updaters + 1] = function() windowKey:Update(); minimap:Update() end
 
     local behave = Card(page, "While a ring is open", half + 12, 0, half, TOP_H)
     local checks = {
@@ -2029,27 +2040,3 @@ function H.SetOptionsLayout(id)
     SetLayout(id)
     if frame.layoutSwitch then frame.layoutSwitch:Update() end
 end
-
--- Addon compartment / Settings entry.
-function Halo_OpenOptions() H.ToggleOptions() end
-H.On("login", function()
-    if Settings and Settings.RegisterCanvasLayoutCategory then
-        local panel = CreateFrame("Frame")
-        local open = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-        open:SetSize(160, 24)
-        open:SetPoint("TOPLEFT", 16, -16)
-        open:SetText("Open Halo")
-        open:SetScript("OnClick", function()
-            -- Closing a Blizzard panel from addon code runs the gamepad window manager with
-            -- addon taint (the "A and B dead until /reload" bug), so in the gamepad interface
-            -- Settings stays open behind the Halo window.
-            if SettingsPanel and SettingsPanel:IsShown() and not H.IsGamepadInterface() then HideUIPanel(SettingsPanel) end
-            H.ToggleOptions(1)
-        end)
-        local note = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        note:SetPoint("TOPLEFT", open, "BOTTOMLEFT", 0, -10)
-        note:SetText("Or type /halo")
-        local ok, category = pcall(Settings.RegisterCanvasLayoutCategory, panel, "Halo")
-        if ok and category then pcall(Settings.RegisterAddOnCategory, category) end
-    end
-end)

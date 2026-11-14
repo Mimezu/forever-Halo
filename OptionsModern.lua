@@ -220,6 +220,18 @@ local function Sheet(parent, K)
             K.Button(row.frame, b[1], CONTROL_X + (i - 1) * (width + 4), -3, width, b[2])
         end
     end
+    -- Label, a keycap for the Halo window key, then a switch beside it.
+    function Card:WindowKey(text, check, get, set)
+        local row = self:Row()
+        Label(row, text)
+        local key = H.WindowKeyCap(row.frame, 96)
+        key:SetPoint("TOPLEFT", CONTROL_X, -3)
+        if K.Skin() then K.Skin().Button(key) end
+        Tip(key, text, "Esc cancels · Backspace clears")
+        local box = K.Check(row.frame, check, CONTROL_X + 100, -1, get, set, self.width - CONTROL_X - 134)
+        On(function() key:Update(); box:Update() end)
+        return key, box
+    end
     -- Text that grows with what it says.
     function Card:Note(text)
         local row = self:Row(nil, 20)
@@ -309,6 +321,7 @@ function H.BuildOptionsB(page, K)
         H.SetOption("scale", math.max(0.6, math.min(1.6, v)))
         K.Refresh(2)
     end, {})
+    open:WindowKey("Open Halo", "Minimap icon", H.MinimapShown, H.SetMinimapShown)
 
     local pad = left:Card("Gamepad")
     pad:Seg("Point with", { { "Right stick", "right" }, { "Left stick", "left" } }, Opt("stick"), SetOpt("stick"))

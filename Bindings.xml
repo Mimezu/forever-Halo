@@ -1,0 +1,5 @@
+<Bindings>
+	<Binding name="HALO_TOGGLE" header="HALO" category="ADDONS">
+		Halo_OpenOptions()
+	</Binding>
+</Bindings>
