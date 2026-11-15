@@ -261,18 +261,23 @@ K.macro = {
     end,
 }
 
+-- The set's name, icon, id, equipped... ("x and f()" would keep only the first value).
+local function SetInfo(name)
+    local id = C_EquipmentSet and Call(C_EquipmentSet.GetEquipmentSetID, name)
+    if not id then return nil end
+    return Call(C_EquipmentSet.GetEquipmentSetInfo, id)
+end
+
 K.equipset = {
     label = "Equipment set",
     info = function(s)
-        local id = C_EquipmentSet and Call(C_EquipmentSet.GetEquipmentSetID, s.name)
-        local _, icon = id and Call(C_EquipmentSet.GetEquipmentSetInfo, id)
+        local _, icon = SetInfo(s.name)
         return s.name or "Equipment set", icon or "Interface\\Icons\\INV_Chest_Chain_04"
     end,
     known = function(s) return C_EquipmentSet ~= nil and Call(C_EquipmentSet.GetEquipmentSetID, s.name) ~= nil end,
     attr = function(s) return { type = "equipmentset", equipmentset = s.name } end,
     state = function(s)
-        local id = C_EquipmentSet and Call(C_EquipmentSet.GetEquipmentSetID, s.name)
-        local _, _, _, equipped = id and Call(C_EquipmentSet.GetEquipmentSetInfo, id)
+        local _, _, _, equipped = SetInfo(s.name)
         return nil, nil, nil, true, equipped == true
     end,
 }

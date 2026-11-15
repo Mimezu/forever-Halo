@@ -1470,6 +1470,14 @@ do
     live = H.ExpandRing(ring)
     check(#live == 2 and live[1].itemID == 4541 and live[2].itemID == 1251, "a warrior gets food only")
     check(H.MealKind("Refreshment") == "both" and H.MealKind("Food & Drink") == "both" and H.MealKind(nil) == "food", "meal kinds")
+    -- Equipment sets show the icon chosen for the set, and light up while worn.
+    local savedSets = C_EquipmentSet
+    C_EquipmentSet = { GetEquipmentSetID = function(n) return n == "Tank" and 3 or nil end,
+        GetEquipmentSetInfo = function(id) if id == 3 then return "Tank", 132344, 3, true end end }
+    local _, setIcon = H.SliceInfo({ kind = "equipset", name = "Tank" })
+    check(setIcon == 132344, "equipment set: its own icon")
+    check(select(5, H.SliceState({ kind = "equipset", name = "Tank" })) == true, "equipment set: lit while worn")
+    C_EquipmentSet = savedSets
     H.DeleteRing(ring.id)
     bags[0], C_Item.GetItemInfoInstant, C_Item.GetItemSpell, C_Item.GetDetailedItemLevelInfo,
         C_Item.GetItemInfo, C_Item.IsUsableItem, C_Item.GetItemCount, UnitLevel, UnitClass = unpack(saved, 1, 9)
