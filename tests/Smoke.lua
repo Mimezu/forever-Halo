@@ -1182,6 +1182,38 @@ do
     H.DeleteRing(menuRing.id); advance(1)
 end
 
+-- 9b2. Turning the whole ring: drag its background, it snaps, slice 1 is the top one.
+GetCursorInfo = GetCursorInfo or function() return nil end
+do
+    local spinRing = H.NewRing("Spin ring")
+    spinRing.slices = { { kind = "emote", token = "bow" }, { kind = "emote", token = "wave" },
+        { kind = "emote", token = "cheer" }, { kind = "emote", token = "dance" } }
+    H.Changed("spin"); advance(1)
+    H.ToggleOptions(1)
+    for _, f in ipairs(frames) do
+        if rawget(f, "ringID") == spinRing.id then f.scripts.OnClick(f) end
+    end
+    local spinner
+    for _, f in ipairs(frames) do if rawget(f, "haloSpinner") then spinner = f end end
+    check(spinner, "the ring canvas can be turned")
+    cursorX, cursorY = 500, 460
+    spinner.scripts.OnMouseDown(spinner, "LeftButton")
+    cursorX, cursorY = 560, 400            -- a quarter turn clockwise
+    spinner.scripts.OnUpdate(spinner, 0.02)
+    spinner.scripts.OnMouseUp(spinner, "LeftButton")
+    for _ = 1, 3 do spinner.scripts.OnUpdate(spinner, 1) end
+    check(spinRing.slices[1].token == "dance" and spinRing.slices[2].token == "bow", "a quarter turn moves every slice one place")
+    cursorX, cursorY = 500, 460
+    spinner.scripts.OnMouseDown(spinner, "LeftButton")
+    cursorX, cursorY = 440, 400
+    spinner.scripts.OnUpdate(spinner, 0.02)
+    spinner.scripts.OnMouseDown(spinner, "RightButton")   -- cancel
+    for _ = 1, 3 do spinner.scripts.OnUpdate(spinner, 1) end
+    check(spinRing.slices[1].token == "dance", "right-click cancels a turn")
+    cursorX, cursorY = 500, 400
+    H.DeleteRing(spinRing.id); advance(1)
+end
+
 -- 9c. Layout B: the same window redesigned, behind the footer's A | B switch.
 do
     check(H.db.window.layout == nil, "layout A by default")

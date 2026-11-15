@@ -475,7 +475,8 @@ function H.BuildRingsB(page, K)
     local guideText = K.Note(guide,
         "|cffffd100+|r  Emotes, markers, lists, macros\n\n" ..
         "|cffffd100Drop|r  Spells, items, mounts, pets\n\n" ..
-        "|cffffd100Drag|r  Move a slice", 10, -32, BW)
+        "|cffffd100Drag|r  Move a slice\n\n" ..
+        "|cffffd100Turn|r  Drag the ring", 10, -32, BW)
     guideText:SetSpacing(2)
 
     local ringCard = K.Card(editor, "This ring", IX, -(BODY_Y + SLICE_H + 8), IW, BODY_H - SLICE_H - 8)

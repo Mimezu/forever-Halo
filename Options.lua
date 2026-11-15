@@ -980,6 +980,100 @@ local function RingCanvas(parent, x, y, w, h, o)
     end
     stage:SetScript("OnHide", function() EndDrag(false) end)
 
+    -- Turn the whole ring: drag its background (not a slice). The slices follow the cursor
+    -- round, then snap to the nearest place; slice 1 is the one that ends at the top.
+    -- Right-click while turning cancels.
+    local spin = { on = false, offset = 0 }
+    local spinner = CreateFrame("Frame", nil, canvas)
+    spinner:SetAllPoints()
+    spinner:SetFrameLevel(stage:GetFrameLevel())
+    spinner:EnableMouse(true)
+    spinner.haloSpinner = true   -- (tests)
+    local rim = stage:CreateTexture(nil, "BORDER")
+    rim:SetPoint("CENTER")
+    rim:SetTexture(ROUND_MASK)
+    rim:SetBlendMode("ADD")
+    rim:SetVertexColor(1, 0.8, 0.35)
+    rim:SetAlpha(0)
+    local function CursorAngle()
+        local cx, cy = GetCursorPosition()
+        local scale = stage:GetEffectiveScale()
+        local sx, sy = stage:GetCenter()
+        if not sx then return nil end
+        local dx, dy = cx / scale - sx, cy / scale - sy
+        return math.atan2(dx, dy), math.sqrt(dx * dx + dy * dy)
+    end
+    local function OnRing()
+        local _, dist = CursorAngle()
+        return dist and layout.n >= 2 and dist <= layout.sr + 34
+    end
+    local function PlaceSpun(offset)
+        local step = 2 * math.pi / layout.n
+        for i = 1, layout.n do
+            local b = slotButtons[i]
+            local a = (i - 1) * step + offset
+            b.px, b.py = layout.sr * math.sin(a), layout.sr * math.cos(a)
+            b:ClearAllPoints()
+            b:SetPoint("CENTER", stage, "CENTER", b.px, b.py)
+        end
+    end
+    local function CommitSpin(k)
+        local ring = CurrentRing()
+        local n = layout.n
+        if ring and k % n ~= 0 and #ring.slices == n then
+            local old, selected = {}, selectedSlice and ring.slices[selectedSlice]
+            for i = 1, n do old[i] = ring.slices[i] end
+            for i = 1, n do ring.slices[(i - 1 + k) % n + 1] = old[i] end
+            for i, s in ipairs(ring.slices) do if s == selected then selectedSlice = i end end
+            H.Changed("slices")
+        end
+        pageRefresh[1]()
+    end
+    spinner:SetScript("OnMouseDown", function(_, mouse)
+        if spin.on then
+            if mouse == "RightButton" then spin.on, spin.snap = false, 0 end
+            return
+        end
+        if GetCursorInfo() then DropCursor(); return end
+        if mouse ~= "LeftButton" or drag.from or not OnRing() then return end
+        spin.on, spin.start, spin.offset, spin.snap = true, CursorAngle(), 0, nil
+        GameTooltip:Hide()
+        PlaySound(SOUNDKIT.U_CHAT_SCROLL_BUTTON)
+    end)
+    spinner:SetScript("OnMouseUp", function(_, mouse)
+        if not spin.on or mouse ~= "LeftButton" then return end
+        local step = 2 * math.pi / layout.n
+        spin.on = false
+        spin.snap = math.floor(spin.offset / step + 0.5) * step
+    end)
+    spinner:SetScript("OnUpdate", function(_, elapsed)
+        local glow = (spin.on and 0.14) or ((OnRing() and spinner:IsMouseOver() and not drag.from) and 0.07) or 0
+        rim:SetSize(2 * layout.sr + 70, 2 * layout.sr + 70)
+        spin.glow = (spin.glow or 0) + (glow - (spin.glow or 0)) * math.min(1, elapsed * 10)
+        rim:SetAlpha(spin.glow)
+        if spin.on then
+            local a = CursorAngle()
+            if a then
+                -- Unwrapped, so a turn past the bottom keeps going instead of jumping.
+                local d = (a - spin.start + math.pi) % (2 * math.pi) - math.pi
+                spin.offset, spin.start = spin.offset + d, a
+                PlaceSpun(spin.offset)
+            end
+        elseif spin.snap then
+            spin.offset = spin.offset + (spin.snap - spin.offset) * math.min(1, elapsed * 16)
+            if math.abs(spin.snap - spin.offset) < 0.01 then
+                local k = math.floor(spin.snap / (2 * math.pi / math.max(layout.n, 1)) + 0.5)
+                spin.snap, spin.offset = nil, 0
+                if k ~= 0 then PlaySound(SOUNDKIT.U_CHAT_SCROLL_BUTTON) end
+                CommitSpin(k)
+            else
+                PlaceSpun(spin.offset)
+            end
+        end
+    end)
+    spinner:SetScript("OnHide", function() spin.on, spin.snap, spin.offset = false, nil, 0 end)
+    spinner:SetScript("OnReceiveDrag", function() DropCursor() end)
+
     local function SlotButton(i)
         if slotButtons[i] then return slotButtons[i] end
         local b = CreateFrame("Button", nil, stage)
