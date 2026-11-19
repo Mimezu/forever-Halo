@@ -23,6 +23,15 @@ function wipe(t) for k in pairs(t) do t[k] = nil end return t end
 strmatch = string.match
 function geterrorhandler() return function(e) error(e) end end
 function hooksecurefunc(target, name, hook)
+    if type(target) == "table" and type(name) == "string" then   -- a table's method
+        local original = target[name]
+        target[name] = function(...)
+            local a, b, c, d = original(...)
+            hook(...)
+            return a, b, c, d
+        end
+        return
+    end
     if type(target) ~= "string" then return end        -- frame methods: not needed here
     local original = _G[target]
     _G[target] = function(...)
@@ -987,6 +996,43 @@ do
     check(click(y, true) == false and env.active == nil, "chord: L1 alone opens nothing")
     stickState.x, stickState.y, stickState.len = 0, 0, 0
     H.SetOption("padMode", "hold"); H.DeleteRing(layer.id); advance(1); advance(1)
+end
+
+-- Blizzard gamepad panels (crafting: R3 Set Amount): while a panel's binding set uses a
+-- ring's button, the ring lets it go; it takes it back when the panel closes.
+do
+    local m = { bindingSetStack = {} }
+    function m:AddBindingSet(set) table.insert(self.bindingSetStack, set) end
+    function m:RemoveSet(set)
+        for i, e in ipairs(self.bindingSetStack) do if e == set then table.remove(self.bindingSetStack, i) break end end
+    end
+    function m:ClearBindings() wipe(self.bindingSetStack) end
+    GamepadSharedUtility = { InputBindingManager = m }
+    H.HookBindingStack()
+    local key = spells.padKey
+    local function Set(name, binding, core)
+        return { name = name, treatBindsAsCore = core, GetBinding = function(_, k) if k == key then return binding end end }
+    end
+    check(overrides[binds][key] == "HaloButton:p" .. rid, "panel: the ring has its button")
+    local panel = Set("Crafting", { type = "InputButtonBinding", buttonToClick = "SetAmountButton" })
+    m:AddBindingSet(panel); advance(1)
+    check(overrides[binds][key] == nil and H.yieldedKeys[key] == "Crafting", "panel: the ring lets its button go")
+    check(H.KeyTakenBy(key, rid) == nil, "panel: no conflict warning for a lent button")
+    H.Changed("rebuild while crafting"); advance(1)
+    check(overrides[binds][key] == nil, "panel: a rebuild does not take it back")
+    m:RemoveSet(panel); advance(1)
+    check(overrides[binds][key] == "HaloButton:p" .. rid and not H.yieldedKeys[key], "panel closed: the ring takes it back")
+    local block = Set("Blocker", { type = "InputButtonBinding", buttonToClick = "" })
+    m:AddBindingSet(block); advance(1)
+    check(overrides[binds][key] == "HaloButton:p" .. rid, "panel: an empty block binding does not count")
+    m:ClearBindings()
+    m:AddBindingSet(Set("HUD", { type = "InputFunctionBinding" }, true)); advance(1)
+    check(overrides[binds][key] == "HaloButton:p" .. rid, "panel: sets acting as core do not count")
+    m:AddBindingSet(Set("Fn", { type = "InputFunctionBinding" })); advance(1)
+    check(overrides[binds][key] == nil, "panel: function bindings count")
+    m:ClearBindings(); advance(1)
+    check(overrides[binds][key] == "HaloButton:p" .. rid, "panel stack cleared: the ring takes it back")
+    GamepadSharedUtility = nil
 end
 
 -- 8e. Every style opens, animates to the end and closes; per-ring style wins over the default.

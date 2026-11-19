@@ -503,15 +503,76 @@ H.stickName = "Camera"
 
 -- The ring keys of the last build: key -> "r<id>" (keyboard/mouse) or "p<id>" (gamepad).
 local ringBindings = {}
+
+-- Blizzard's gamepad panels (crafting: R3 "Set Amount") put their buttons on a binding stack
+-- above the core set (ping on R3...). While a panel there uses a ring's button, the ring lets
+-- it go; when the panel closes the ring takes it back. Empty "block" bindings and sets that
+-- act as part of the core don't count.
+local yielded = {}
+H.yieldedKeys = yielded
+local function BindingStack()
+    local shared = GamepadSharedUtility
+    local m = shared and shared.InputBindingManager
+    return m and type(m.bindingSetStack) == "table" and m or nil
+end
+local function PanelUses(key)
+    local m = BindingStack()
+    if not m then return nil end
+    for _, set in ipairs(m.bindingSetStack) do
+        if not set.treatBindsAsCore and set.GetBinding then
+            local ok, binding = pcall(set.GetBinding, set, key)
+            if ok and type(binding) == "table" and binding.type ~= "InputAxisBinding"
+                and not (binding.type == "InputButtonBinding" and (binding.buttonToClick or "") == "") then
+                return set.name or "a Blizzard panel"
+            end
+        end
+    end
+end
+
 local function ApplyRingKeys()
     ClearOverrideBindings(binds)
+    wipe(yielded)
     local count = 0
     for key, click in pairs(ringBindings) do
-        SetOverrideBindingClick(binds, true, key, "HaloButton", click)
-        count = count + 1
+        local panel = PanelUses(key)
+        if panel then
+            yielded[key] = panel
+        else
+            SetOverrideBindingClick(binds, true, key, "HaloButton", click)
+            count = count + 1
+        end
     end
     return count
 end
+
+-- Re-check when a panel's bindings come or go (after Blizzard has bound them).
+local function PanelKeysChanged()
+    local changed = false
+    for key in pairs(ringBindings) do
+        if (PanelUses(key) ~= nil) ~= (yielded[key] ~= nil) then changed = true; break end
+    end
+    if not changed then return end
+    H.OutOfCombat("ringKeys", function()
+        local count = ApplyRingKeys()
+        if H.debug then
+            local names = {}
+            for key, panel in pairs(yielded) do names[#names + 1] = key .. " to " .. tostring(panel) end
+            H.Log(("panel bindings changed: %d ring keys bound%s"):format(count,
+                #names > 0 and (", left to Blizzard: " .. table.concat(names, ", ")) or ""))
+        end
+    end)
+end
+local stackHooked = false
+local function HookBindingStack()
+    local m = BindingStack()
+    if stackHooked or not m then return end
+    stackHooked = true
+    local function Soon() C_Timer.After(0, PanelKeysChanged) end
+    for _, method in ipairs({ "AddBindingSet", "RemoveSet", "ClearBindings" }) do
+        if type(m[method]) == "function" then hooksecurefunc(m, method, Soon) end
+    end
+end
+H.HookBindingStack = HookBindingStack   -- (tests)
 
 -- Blizzard's gamepad interface binds its own core actions (ping on R3, autorun on L3, the two
 -- menu buttons) as priority override bindings owned by UIParent: at login, at a moment that
@@ -527,7 +588,7 @@ local function ReassertRingKeys()
         -- Only when Blizzard really took one (every rebind makes the game update all bars).
         local taken
         for key, click in pairs(ringBindings) do
-            if GetBindingAction and GetBindingAction(key, true) ~= "CLICK HaloButton:" .. click then taken = key; break end
+            if not yielded[key] and GetBindingAction and GetBindingAction(key, true) ~= "CLICK HaloButton:" .. click then taken = key; break end
         end
         if not taken then return end
         local count = ApplyRingKeys()
@@ -625,6 +686,7 @@ function H.Compile()
             if padKey and padKey ~= key then ringBindings[padKey] = "p" .. ring.id end
         end
     end
+    HookBindingStack()
     local bound = ApplyRingKeys()
     header:Execute(table.concat(lines, "\n"))
     button:SetScale(UIParent:GetEffectiveScale())
@@ -650,6 +712,7 @@ end
 function H.KeyTakenBy(key, ringID)
     if type(key) ~= "string" or key == "" or not GetBindingAction then return nil end
     if H.SplitChord(key) then return nil end   -- chords are not bindings
+    if yielded[key] then return nil end        -- lent to a Blizzard panel for now
     local action = GetBindingAction(key, true) or ""
     local own = tonumber(action:match("^CLICK HaloButton:[rp](%d+)$"))
     if own == ringID then return nil end
