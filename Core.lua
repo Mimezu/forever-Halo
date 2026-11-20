@@ -413,11 +413,13 @@ SlashCmdList.HALO = function(message)
         H.db = HaloDB
         -- Keep the debug setting and log.
         H.db.debug, H.db.debugLog = old.debug, old.debugLog
+        if H.ForgetCompile then H.ForgetCompile() end
         H.Changed("rings")
         H.Fire("options")
         H.Print("Reset")
     elseif message == "rebuild" then
         if InCombatLockdown() then H.Print("Not in combat"); return end
+        if H.ForgetCompile then H.ForgetCompile() end
         local ok = H.RunCompile()
         H.Print(ok and "Rebuilt" or "Rebuild failed")
         if H.Status then H.Status() end

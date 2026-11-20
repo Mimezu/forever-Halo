@@ -759,6 +759,30 @@ hooksecurefunc("SetOverrideBinding", function(owner, _, key, action)
     end
 end)
 
+-- The last build's restricted script and ring keys. Loot, mounts and zones recompile with
+-- nothing changed; skip the rebind (it refreshes every bar) and the re-execute then.
+local lastScript, lastKeySig, lastBound = nil, nil, 0
+function H.ForgetCompile() lastScript, lastKeySig = nil, nil end
+
+local function KeySignature()
+    local list = {}
+    for key, click in pairs(ringBindings) do list[#list + 1] = key .. "=" .. click end
+    table.sort(list)
+    return table.concat(list, ";")
+end
+
+-- Same test as PanelKeysChanged and ReassertRingKeys: rebind only when something moved.
+local function RingKeysStale(keySig)
+    if keySig ~= lastKeySig or next(relayKeys) ~= nil then return true end
+    for key, click in pairs(ringBindings) do
+        if (PanelUses(key) ~= nil) ~= (yielded[key] ~= nil) then return true end
+        if not yielded[key] and (not GetBindingAction or GetBindingAction(key, true) ~= "CLICK HaloButton:" .. click) then
+            return true
+        end
+    end
+    return false
+end
+
 function H.Compile()
     if InCombatLockdown() then H.OutOfCombat("compile", H.RunCompile); return end
     -- Never swap a ring's contents while it is open: what you see is what you use.
@@ -876,8 +900,11 @@ function H.Compile()
         end
     end
     HookBindingStack()
-    local bound = ApplyRingKeys()
-    header:Execute(table.concat(lines, "\n"))
+    local script, keySig = table.concat(lines, "\n"), KeySignature()
+    if RingKeysStale(keySig) then lastBound = ApplyRingKeys() end
+    local bound = lastBound
+    if script ~= lastScript then header:Execute(script) end
+    lastScript, lastKeySig = script, keySig
     button:SetScale(UIParent:GetEffectiveScale())
     if H.debug then H.Log(("rings built: %d rings, %d keys bound"):format(#H.db.rings, bound)) end
     H.Fire("compiled")

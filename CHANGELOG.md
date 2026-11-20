@@ -3,6 +3,7 @@
 ## 0.9.39 — 2026-11-20
 
 - Open Halo keycap shares the key tables with the ring keycaps
+- Loot, mounts and zones no longer rebind ring keys or rebuild rings when nothing changed
 
 ## 0.9.38 — 2026-11-20
 
