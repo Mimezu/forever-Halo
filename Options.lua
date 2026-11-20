@@ -558,6 +558,8 @@ local function AddMenu(owner)
         end
         if #sets > 0 then Group("Equipment set", sets) end
     end
+    entries[#entries + 1] = { text = "Fishing pole", icon = "Interface\\Icons\\INV_Fishingpole_02",
+        func = function() AddSlice({ kind = "fish" }) end }
     entries[#entries + 1] = { text = "Custom macro...", func = function() OpenMacroEditor(nil) end }
     entries[#entries + 1] = { divider = true }
     entries[#entries + 1] = { note = "Or drop a spell or item" }

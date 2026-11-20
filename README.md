@@ -15,6 +15,7 @@ Put the `Halo` folder in `World of Warcraft\_forever_\Interface\AddOns\`.
 - A ring holds 12 slices. Automatic lists fill what is left.
 - Gamepad layers: give a ring R3, another R3 + L1. Hold L1 in the R3 ring to switch, or hold L1, then press R3.
 - Emote icons: three sets in Options (Drawn, Engraved, Line).
+- **Fishing pole** (in **+**): one press, your best pole from the bags; the next, back to your weapons. The same swap as Gamepad Companion's.
 - Gamepad bar combos (R1 + D-pad): **...** → **Make macro**, put it on that slot.
 - Works in combat. Ring changes made in combat apply after.
 

@@ -360,6 +360,13 @@ events:SetScript("OnEvent", function(_, event, arg1)
         H.db = HaloDB
         H.debug = H.db.debug == true   -- stays on across /reload until /halo debug turns it off
     elseif event == "PLAYER_LOGIN" then
+        -- (the fishing pole swap's weapons, per character: MimezuFishing.lua, shared with Gamepad Companion)
+        if MimezuFishing then
+            H.db.fishing = type(H.db.fishing) == "table" and H.db.fishing or {}
+            local key = H.CharacterKey()
+            H.db.fishing[key] = type(H.db.fishing[key]) == "table" and H.db.fishing[key] or {}
+            MimezuFishing.Attach(H.db.fishing[key])
+        end
         if H.debug then H.Log("login / reload (debug on) | Halo " .. tostring(H.version)) end
         H.Fire("login")
         if H.migrationNote then H.Print(H.migrationNote); H.migrationNote = nil end

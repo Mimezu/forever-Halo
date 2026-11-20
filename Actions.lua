@@ -381,6 +381,31 @@ K.text = {
     end,
 }
 
+-- The fishing pole swap (MimezuFishing.lua, the same file Gamepad Companion ships): the best
+-- pole from the bags, or back to the weapons you held. Its macro picks the way by condition, so
+-- it stays right in combat; it is rebuilt with the ring when the bags or your hands change.
+local POLE_ICON = "Interface\\Icons\\INV_Fishingpole_02"
+K.fish = {
+    label = "Fishing pole",
+    info = function()
+        if MimezuFishing then return MimezuFishing.Look() end
+        return "Fishing pole", POLE_ICON
+    end,
+    known = function() return true end,
+    attr = function()
+        local text = MimezuFishing and MimezuFishing.Macro()
+        return { type = "macro", macrotext = text or "/run MimezuFishing.Note()" }
+    end,
+    state = function()
+        return nil, nil, nil, true, MimezuFishing ~= nil and MimezuFishing.PoleEquipped()
+    end,
+    tooltip = function(_, tip)
+        local name = MimezuFishing and MimezuFishing.Look() or "Fishing pole"
+        tip:AddLine(name, 1, 1, 1)
+        tip:AddLine("Your best pole, or back to your weapons", 0.75, 0.75, 0.75, true)
+    end,
+}
+
 K.ring = {
     label = "Ring",
     info = function(s)

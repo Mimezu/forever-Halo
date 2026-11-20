@@ -2,13 +2,14 @@
 ## Title: Halo
 ## Notes: Small radial menus for potions, mounts, pets and other quick actions. Keyboard, mouse and gamepad.
 ## Author: Mimezu
-## Version: 0.9.34
+## Version: 0.9.35
 ## SavedVariables: HaloDB
 ## OptionalDeps: FrameGambit
 ## AddonCompartmentFunc: Halo_OpenOptions
 ## IconTexture: Interface\Icons\Spell_Holy_Aspiration
 ## Category: Mimezu's Suite
 
+MimezuFishing.lua
 Core.lua
 Actions.lua
 Secure.lua

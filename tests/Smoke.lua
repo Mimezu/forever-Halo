@@ -263,7 +263,7 @@ end
 check(#frames > 0, "files loaded")
 local allowed = { Halo = true, SLASH_HALO1 = true, Halo_OpenOptions = true, HaloHeader = true, HaloButton = true,
     HaloKeys = true, HaloBindings = true, HaloRelay = true, HaloChordKeys = true, HaloRing = true, HaloStick = true, HaloStickCatcher = true,
-    BINDING_HEADER_HALO = true, BINDING_NAME_HALO_TOGGLE = true, HaloMinimapButton = true }
+    BINDING_HEADER_HALO = true, BINDING_NAME_HALO_TOGGLE = true, HaloMinimapButton = true, MimezuFishing = true }
 for k in pairs(_G) do
     if not before[k] then check(allowed[k], "unexpected global: " .. tostring(k)) end
 end
@@ -1197,6 +1197,12 @@ do
         check(rowNamed(1, text), "Add menu entry: " .. text)
     end
     check(not rowNamed(1, "Equipment set"), "no equipment sets here")
+    -- the fishing pole swap (MimezuFishing, shared with Gamepad Companion)
+    check(rowNamed(1, "Fishing pole"), "Add menu entry: Fishing pole")
+    check(type(MimezuFishing) == "table" and H.Kinds.fish ~= nil, "the fishing pole swap is a slice kind")
+    local fishAttr = H.SliceAttributes({ kind = "fish" })
+    check(fishAttr and fishAttr.type == "macro" and type(fishAttr.macrotext) == "string", "a fishing slice runs a macro")
+    check(H.SliceKnown({ kind = "fish" }), "a fishing slice always shows (it says when there's no pole)")
     check(rowNamed(1, "Another ring").entry.disabled ~= true, "other rings can be nested")
     check(rowNamed(1, "Add to Menu ring").entry.title and not rowNamed(1, "Add to Menu ring").hover.shown, "the title is not a button")
     -- Hovering a group opens its submenu; hovering another group swaps it.
