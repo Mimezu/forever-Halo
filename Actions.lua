@@ -19,25 +19,75 @@ local function Call(fn, ...)
     if ok then return a, b, c, d, e, f, g, h, i, j, k end
 end
 
--- Emotes: token (slash command), label, icon.
-H.EMOTES = {
-    { "wave", "Wave", "Interface\\Icons\\INV_Gauntlets_04" },
-    { "hello", "Hello", "Interface\\Icons\\INV_Gauntlets_05" },
-    { "bow", "Bow", "Interface\\Icons\\Spell_Holy_Devotion" },
-    { "cheer", "Cheer", "Interface\\Icons\\Ability_Warrior_BattleShout" },
-    { "applaud", "Applaud", "Interface\\Icons\\Spell_Holy_SealOfWisdom" },
-    { "dance", "Dance", "Interface\\Icons\\INV_Misc_Drum_01" },
-    { "laugh", "Laugh", "Interface\\Icons\\Ability_Rogue_Disguise" },
-    { "thank", "Thank", "Interface\\Icons\\Spell_Holy_PrayerOfHealing02" },
-    { "salute", "Salute", "Interface\\Icons\\Ability_Warrior_Challange" },
-    { "kneel", "Kneel", "Interface\\Icons\\Spell_Holy_Restoration" },
-    { "sit", "Sit", "Interface\\Icons\\Spell_Nature_Tranquility" },
-    { "sleep", "Sleep", "Interface\\Icons\\Spell_Nature_Sleep" },
-    { "roar", "Roar", "Interface\\Icons\\Ability_Druid_ChallangingRoar" },
-    { "flex", "Flex", "Interface\\Icons\\Spell_Nature_Strength" },
-    { "point", "Point", "Interface\\Icons\\Ability_Hunter_SniperShot" },
-    { "kiss", "Kiss", "Interface\\Icons\\Spell_Shadow_SoothingKiss" },
-}
+-- Emotes: token (slash command), label, icon, menu group. Icons: art/make_emotes.py.
+local EMOTE_ART = "Interface\\AddOns\\Halo\\art\\emotes\\"
+H.EMOTE_GROUPS = { "Greet", "Joy", "Feel", "Talk", "Battle", "Rest" }
+H.EMOTES = {}
+for _, e in ipairs({
+    -- Greet
+    { "wave", "Wave", "Greet" },
+    { "hello", "Hello", "Greet" },
+    { "bow", "Bow", "Greet" },
+    { "curtsey", "Curtsey", "Greet" },
+    { "salute", "Salute", "Greet" },
+    { "beckon", "Beckon", "Greet" },
+    { "welcome", "Welcome", "Greet" },
+    { "bye", "Bye", "Greet" },
+    -- Joy
+    { "cheer", "Cheer", "Joy" },
+    { "applaud", "Applaud", "Joy" },
+    { "dance", "Dance", "Joy" },
+    { "laugh", "Laugh", "Joy" },
+    { "rofl", "ROFL", "Joy" },
+    { "victory", "Victory", "Joy" },
+    { "flex", "Flex", "Joy" },
+    { "kiss", "Kiss", "Joy" },
+    { "flirt", "Flirt", "Joy" },
+    -- Feel
+    { "cry", "Cry", "Feel" },
+    { "shy", "Shy", "Feel" },
+    { "angry", "Angry", "Feel" },
+    { "gasp", "Gasp", "Feel" },
+    { "shrug", "Shrug", "Feel" },
+    { "beg", "Beg", "Feel" },
+    { "cower", "Cower", "Feel" },
+    { "chicken", "Chicken", "Feel" },
+    { "rude", "Rude", "Feel" },
+    { "mourn", "Mourn", "Feel" },
+    -- Talk
+    { "talk", "Talk", "Talk" },
+    { "question", "Question", "Talk" },
+    { "yes", "Yes", "Talk" },
+    { "no", "No", "Talk" },
+    { "thank", "Thank", "Talk" },
+    { "shout", "Shout", "Talk" },
+    { "point", "Point", "Talk" },
+    { "train", "Train", "Talk" },
+    -- Battle
+    { "roar", "Roar", "Battle" },
+    { "threaten", "Threaten", "Battle" },
+    { "charge", "Charge", "Battle" },
+    { "attacktarget", "Attack", "Battle" },
+    { "incoming", "Incoming", "Battle" },
+    { "oom", "Out of mana", "Battle" },
+    { "healme", "Heal me", "Battle" },
+    { "openfire", "Open fire", "Battle" },
+    { "followme", "Follow me", "Battle" },
+    { "wait", "Wait", "Battle" },
+    { "flee", "Flee", "Battle" },
+    { "surrender", "Surrender", "Battle" },
+    -- Rest
+    { "sit", "Sit", "Rest" },
+    { "sleep", "Sleep", "Rest" },
+    { "kneel", "Kneel", "Rest" },
+    { "stand", "Stand", "Rest" },
+    { "laydown", "Lie down", "Rest" },
+    { "eat", "Eat", "Rest" },
+    { "drink", "Drink", "Rest" },
+    { "pray", "Pray", "Rest" },
+}) do
+    H.EMOTES[#H.EMOTES + 1] = { e[1], e[2], EMOTE_ART .. e[1], e[3] }
+end
 local EMOTE_BY_TOKEN = {}
 for _, e in ipairs(H.EMOTES) do EMOTE_BY_TOKEN[e[1]] = e end
 

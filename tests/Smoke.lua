@@ -1177,7 +1177,20 @@ do
     -- Hovering a group opens its submenu; hovering another group swaps it.
     local emote = rowNamed(1, "Emote")
     emote.scripts.OnEnter(emote)
-    check(P.panels[2] and P.panels[2].shown and #rowsOf(2) == #H.EMOTES, "hovering Emote opens its submenu")
+    check(P.panels[2] and P.panels[2].shown and #rowsOf(2) == #H.EMOTE_GROUPS, "hovering Emote opens its groups")
+    local greet = rowNamed(2, "Greet")
+    greet.scripts.OnEnter(greet)
+    local bowRow = rowNamed(3, "Bow")
+    check(P.panels[3] and P.panels[3].shown and bowRow and bowRow.icon.shown, "a group lists its emotes with icons")
+    local grouped = 0
+    for _, name in ipairs(H.EMOTE_GROUPS) do
+        for _, e in ipairs(H.EMOTES) do if e[4] == name then grouped = grouped + 1 end end
+    end
+    check(grouped == #H.EMOTES and #H.EMOTES >= 50, "every emote sits in a group")
+    for _, e in ipairs(H.EMOTES) do
+        local f = io.open("art/emotes/" .. e[1] .. ".tga", "rb")
+        check(f, "icon for /" .. e[1]); if f then f:close() end
+    end
     local marker = rowNamed(1, "Target marker")
     marker.scripts.OnEnter(marker)
     check(#rowsOf(2) == #H.MARKERS + 1 and rowNamed(2, "Clear marker"), "hovering Target marker swaps the submenu")

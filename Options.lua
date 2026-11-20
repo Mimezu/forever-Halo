@@ -413,6 +413,9 @@ local function PopupRow(panel, i)
     row.dot:SetPoint("LEFT", 8, 0)
     row.dot:SetTexture(ROUND_MASK)
     row.dot:SetVertexColor(1, 0.82, 0)
+    row.icon = row:CreateTexture(nil, "ARTWORK")
+    row.icon:SetSize(16, 16)
+    row.icon:SetPoint("LEFT", 8, 0)
     row.arrow = row:CreateTexture(nil, "ARTWORK")
     row.arrow:SetSize(10, 10)
     row.arrow:SetPoint("RIGHT", -6, 0)
@@ -457,9 +460,12 @@ ShowPopupLevel = function(level, entries, anchor, point, relPoint, x, y)
         row.hover:SetShown(kind == "item" and not entry.disabled)
         row.dot:SetShown(kind == "item" and entry.radio ~= nil and entry.radio() == true)
         row.arrow:SetShown(kind == "item" and entry.items ~= nil)
+        row.icon:SetShown(entry.icon ~= nil)
+        if entry.icon then row.icon:SetTexture(entry.icon) end
+        row.text:SetPoint("LEFT", entry.icon and 30 or 20, 0)
         row.arrow:SetAlpha(entry.disabled and 0.4 or 1)
         local textWidth = row.text:GetStringWidth()
-        width = math.max(width, (tonumber(textWidth) or 0) + 20 + 18 + 8)
+        width = math.max(width, (tonumber(textWidth) or 0) + (entry.icon and 30 or 20) + 18 + 8)
         top = top + height
         row:Show()
     end
@@ -521,9 +527,14 @@ local function AddMenu(owner)
         auto[#auto + 1] = { text = a[2], func = function() AddSlice({ kind = "auto", source = a[1] }) end }
     end
     Group("Automatic", auto)
-    local emotes = {}
+    local emotes, byGroup = {}, {}
+    for _, name in ipairs(H.EMOTE_GROUPS) do
+        byGroup[name] = {}
+        emotes[#emotes + 1] = { text = name, items = byGroup[name] }
+    end
     for _, e in ipairs(H.EMOTES) do
-        emotes[#emotes + 1] = { text = e[2], func = function() AddSlice({ kind = "emote", token = e[1] }) end }
+        local list = byGroup[e[4]]
+        list[#list + 1] = { text = e[2], icon = e[3], func = function() AddSlice({ kind = "emote", token = e[1] }) end }
     end
     Group("Emote", emotes)
     local markers = {}
