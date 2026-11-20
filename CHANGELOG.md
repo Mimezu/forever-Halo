@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.38 — 2026-11-20
+
+- Fixed: hold R2, press R3, let both go: the R2 ring stayed on screen but the R3 ring's slice was used. A ring opened on a layer (second button held first) now stays that ring until it closes
+
 ## 0.9.37 — 2026-11-20
 
 - Fixed: hold R2, press R3, use a slice: Blizzard's bar stayed on its R2 page after R2 was let go. A pad button already held when a ring opens is no longer bound by the ring, so its release reaches the game. Once let go, the ring takes it back (at once out of combat, at the next ring input in combat), and a layer button let go returns to the opening ring

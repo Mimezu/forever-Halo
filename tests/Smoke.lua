@@ -1007,8 +1007,23 @@ do
     check(overrides[keys]["PADRSHOULDER"] == "HaloButton:use", "L1 held: the other buttons still confirm")
     padButtons[5] = nil
     click("reclaim", true)
-    check(env.active == rid, "L1 then base: letting go of L1 goes back to the base ring")
+    check(env.active == layer.id, "L1 then base: the layer ring stays after L1 is let go")
     check(overrides[keys]["PADLSHOULDER"] == "HaloButton:" .. y, "L1 let go: the ring takes L1 again")
+    click(y, true); click(y, false)
+    check(env.active == layer.id, "L1 again: still the layer ring")
+    click("p" .. rid, false); click("close", true)
+    -- Tap mode: hold L1, tap the base, let both go: the layer ring stays, and is the one used.
+    H.SetOption("padMode", "tap"); advance(1); advance(1)
+    padButtons[5] = true
+    click("p" .. rid, true); click("p" .. rid, false)
+    padButtons[5] = nil
+    click("reclaim", true)
+    check(env.active == layer.id, "tap: L1 held, then base, both let go: the layer ring stays")
+    stickState.x, stickState.y, stickState.len = 0, 1, 1
+    check(click("p" .. rid, true) == "LeftButton" and env.active == nil, "tap: the layer's slice is used")
+    click("p" .. rid, false)
+    stickState.x, stickState.y, stickState.len = 0, 0, 0
+    H.SetOption("padMode", "hold"); advance(1); advance(1)
     click("p" .. rid, false); click("close", true)
     click("p" .. rid, true)
     check(env.active == rid, "L1 not held: the base ring")

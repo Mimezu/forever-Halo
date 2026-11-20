@@ -97,6 +97,7 @@ header:Execute([[
         if active then owner:Run(Close) end
         active, sticky, held = rid, false, nil
         layerRoot = r.layers and rid or nil
+        layerLocked = nil
         chordKeys:ClearBindings()
         wipe(gameHeld); gameHeldAny = false
         local st = GetGamePadState()
@@ -130,7 +131,7 @@ header:Execute([[
         local used = ...
         if not active then return end
         local was = active
-        active, sticky, held, layerRoot = nil, false, nil, nil
+        active, sticky, held, layerRoot, layerLocked = nil, false, nil, nil, nil
         stickyPick = nil
         wipe(aimHeld); aimArmed, aimMax, aimLast = false, 0, nil
         wipe(stack)
@@ -225,11 +226,13 @@ header:Execute([[
     ]==]
 
     -- A layer button held (y<id>): that ring takes over; let go: back to the opening ring.
+    -- Opened on a layer (second button held first: hold R2, press R3): that ring is the one
+    -- asked for, so it stays until closed (layerLocked).
     Layer = [==[
         local cid, down = ...
         if not layerRoot then return end
         local target = down and cid or layerRoot
-        if not down and active ~= cid then return end
+        if not down and (active ~= cid or layerLocked) then return end
         local r = RINGS[target]
         if not r or r.n == 0 or target == active then return end
         wipe(stack)
@@ -260,7 +263,7 @@ header:Execute([[
                 gameHeldAny = true
             end
         end
-        if back then owner:Run(Layer, back, false)
+        if back and not layerLocked then owner:Run(Layer, back, false)
         elseif changed then owner:Run(SetKeys) end
     ]==]
 
@@ -322,7 +325,7 @@ header:WrapScript(button, "OnClick", [[
         if owner:Run(Open, pad) then
             sticky = true
             owner:CallMethod("OnRingSticky", pad)
-            if chordLayer then owner:Run(Layer, chordLayer, true) end
+            if chordLayer then owner:Run(Layer, chordLayer, true); layerLocked = true end
         end
         return false
     end
@@ -334,7 +337,7 @@ header:WrapScript(button, "OnClick", [[
             if active and sticky and owner:Run(Owns, rid) then owner:Run(Close); return false end
             if owner:Run(Open, rid) then
                 held = rid
-                if chordLayer then owner:Run(Layer, chordLayer, true) end
+                if chordLayer then owner:Run(Layer, chordLayer, true); layerLocked = true end
             end
             return false
         end
