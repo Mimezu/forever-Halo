@@ -296,7 +296,6 @@ header:WrapScript(button, "OnClick", [[
     end
     -- Any input while open: first take back the buttons let go since the ring opened.
     if active and gameHeldAny then owner:Run(Reclaim) end
-    if b == "reclaim" then return false end   -- (the watcher below, out of combat)
     lastInput = b   -- how the ring was closed (debug log)
     -- The base button while a chord's second button is held: the base ring, on that layer.
     local wBase, wChord = strmatch(b, "^w(%d+)_(%d+)$")
@@ -463,6 +462,12 @@ end
 -- watcher hands it back to the ring right at the release; in combat the ring's next input does.
 local padIndex = {}      -- pad button -> index in the pad state's buttons (set by Compile)
 local heldAtOpen = {}
+-- Out of combat only. Execute runs it secure; a Click from here would not (insecure caller).
+function H.ReclaimHeld()
+    if InCombatLockdown() then return false end
+    header:Execute("owner:Run(Reclaim)")
+    return true
+end
 local watcher = CreateFrame("Frame")
 watcher:Hide()
 watcher:SetScript("OnUpdate", function(self)
@@ -472,7 +477,7 @@ watcher:SetScript("OnUpdate", function(self)
     for key in pairs(heldAtOpen) do
         if bt[padIndex[key]] then any = true else heldAtOpen[key] = nil; let = true end
     end
-    if let and not InCombatLockdown() then button:Click("reclaim") end
+    if let then H.ReclaimHeld() end
     if not any then self:Hide() end
 end)
 

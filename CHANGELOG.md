@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.40 — 2026-11-20
+
+- Fixed: a pad button held when a ring opened, then let go, raised an error ("Cannot call restricted closure from insecure code") instead of going back to the ring
+
 ## 0.9.39 — 2026-11-20
 
 - Open Halo keycap shares the key tables with the ring keycaps
