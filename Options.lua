@@ -534,7 +534,7 @@ local function AddMenu(owner)
     end
     for _, e in ipairs(H.EMOTES) do
         local list = byGroup[e[4]]
-        list[#list + 1] = { text = e[2], icon = e[3], func = function() AddSlice({ kind = "emote", token = e[1] }) end }
+        list[#list + 1] = { text = e[2], icon = H.EmoteIcon(e[1]), func = function() AddSlice({ kind = "emote", token = e[1] }) end }
     end
     Group("Emote", emotes)
     local markers = {}

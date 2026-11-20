@@ -19,6 +19,7 @@ local DEFAULT_OPTIONS = {
     numberKeys = true,      -- 1-9 / 0 use a slice while a ring is open
     stick = "right",        -- gamepad stick that points
     holdCamera = true,      -- the pointing stick does not turn the camera while a ring is open
+    emoteIcons = "drawn",   -- emote icon set: "drawn", "engraved" or "line" (art/emotes*)
     padMode = "hold",       -- gamepad ring button: "hold" (use on release) or "tap" (tap again to use)
     blockSticks = false,    -- fallback: both sticks go to the ring while it is open (walking pauses)
     padRelease = "keep",    -- gamepad, letting go of the stick: "keep" (the slice stays selected) or "use"

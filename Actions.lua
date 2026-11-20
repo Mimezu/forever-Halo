@@ -20,7 +20,19 @@ local function Call(fn, ...)
 end
 
 -- Emotes: token (slash command), label, icon, menu group. Icons: art/make_emotes.py.
-local EMOTE_ART = "Interface\\AddOns\\Halo\\art\\emotes\\"
+-- Three icon sets (Options): drawn here, and two painted ones.
+H.EMOTE_ICON_SETS = { { "Drawn", "drawn", "emotes" }, { "Engraved", "engraved", "emotes-engraved" },
+    { "Line", "line", "emotes-line" } }
+local function EmoteFolder()
+    local want = H.Option and H.Option("emoteIcons")
+    for _, set in ipairs(H.EMOTE_ICON_SETS) do
+        if set[2] == want then return set[3] end
+    end
+    return "emotes"
+end
+function H.EmoteIcon(token)
+    return "Interface\\AddOns\\Halo\\art\\" .. EmoteFolder() .. "\\" .. token
+end
 H.EMOTE_GROUPS = { "Greet", "Joy", "Feel", "Talk", "Battle", "Rest" }
 H.EMOTES = {}
 for _, e in ipairs({
@@ -86,7 +98,7 @@ for _, e in ipairs({
     { "drink", "Drink", "Rest" },
     { "pray", "Pray", "Rest" },
 }) do
-    H.EMOTES[#H.EMOTES + 1] = { e[1], e[2], EMOTE_ART .. e[1], e[3] }
+    H.EMOTES[#H.EMOTES + 1] = { e[1], e[2], nil, e[3] }   -- [3]: icon, see H.EmoteIcon
 end
 local EMOTE_BY_TOKEN = {}
 for _, e in ipairs(H.EMOTES) do EMOTE_BY_TOKEN[e[1]] = e end
@@ -336,7 +348,7 @@ K.emote = {
     label = "Emote",
     info = function(s)
         local e = EMOTE_BY_TOKEN[s.token]
-        return e and e[2] or ("/" .. tostring(s.token)), e and e[3] or "Interface\\Icons\\Spell_Holy_Heal"
+        return e and e[2] or ("/" .. tostring(s.token)), e and H.EmoteIcon(e[1]) or "Interface\\Icons\\Spell_Holy_Heal"
     end,
     known = function() return true end,
     attr = function(s) return { type = "macro", macrotext = "/" .. tostring(s.token):gsub("[^%w_]", "") } end,

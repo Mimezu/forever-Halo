@@ -354,6 +354,9 @@ function H.BuildOptionsB(page, K)
         tip = { "Show slice numbers", "Keyboard only" } })
     behave:Check("Ring background", Opt("background"), SetOpt("background"), { width = 130 })
     behave:Check("Sounds", Opt("sounds"), SetOpt("sounds"), { width = 100, same = true })
+    local sets = {}
+    for _, set in ipairs(H.EMOTE_ICON_SETS) do sets[#sets + 1] = { set[1], set[2] } end
+    behave:Seg("Emote icons", sets, Opt("emoteIcons"), SetOpt("emoteIcons"))
 
     local how = right:Card("Controls")
     how:Note(H.HelpText)

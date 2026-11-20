@@ -1212,10 +1212,15 @@ do
         for _, e in ipairs(H.EMOTES) do if e[4] == name then grouped = grouped + 1 end end
     end
     check(grouped == #H.EMOTES and #H.EMOTES >= 50, "every emote sits in a group")
-    for _, e in ipairs(H.EMOTES) do
-        local f = io.open("art/emotes/" .. e[1] .. ".tga", "rb")
-        check(f, "icon for /" .. e[1]); if f then f:close() end
+    for _, set in ipairs(H.EMOTE_ICON_SETS) do
+        for _, e in ipairs(H.EMOTES) do
+            local f = io.open("art/" .. set[3] .. "/" .. e[1] .. ".tga", "rb")
+            check(f, set[1] .. " icon for /" .. e[1]); if f then f:close() end
+        end
     end
+    H.SetOption("emoteIcons", "engraved")
+    check(H.EmoteIcon("bow"):match("emotes%-engraved.bow$"), "the option picks the icon set")
+    H.SetOption("emoteIcons", "drawn")
     local marker = rowNamed(1, "Target marker")
     marker.scripts.OnEnter(marker)
     check(#rowsOf(2) == #H.MARKERS + 1 and rowNamed(2, "Clear marker"), "hovering Target marker swaps the submenu")

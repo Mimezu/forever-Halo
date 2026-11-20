@@ -849,7 +849,7 @@ end)
 -- Only the options the secure side reads need a rebuild (the others are drawing only, and
 -- the rune colour picker fires many times a second).
 local SECURE_OPTIONS = { openAt = true, padPos = true, centerPos = true, stick = true, numberKeys = true,
-    padMode = true, padRelease = true, scale = true }
+    padMode = true, padRelease = true, scale = true, emoteIcons = true }
 H.On("options", function(key)
     if key == nil or SECURE_OPTIONS[key] then H.RequestCompile() end
 end)
