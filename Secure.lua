@@ -16,6 +16,12 @@ local header = CreateFrame("Frame", "HaloHeader", nil, "SecureHandlerBaseTemplat
 local button = CreateFrame("Button", "HaloButton", nil, "SecureActionButtonTemplate")
 local keys = CreateFrame("Frame", "HaloKeys", nil, "SecureFrameTemplate")
 local binds = CreateFrame("Frame", "HaloBindings")
+-- Second-button-first chords (hold R2, then press R3): the second button runs through this relay,
+-- which does what the button did before and, while it is held, points the base button at the
+-- chord ring (bindings on chordKeys).
+local relay = CreateFrame("Button", "HaloRelay", nil, "SecureActionButtonTemplate")
+relay:RegisterForClicks("AnyDown", "AnyUp")
+local chordKeys = CreateFrame("Frame", "HaloChordKeys", nil, "SecureFrameTemplate")
 
 -- The button covers the screen while a ring is open: it catches clicks, and its rect is
 -- the coordinate space for pointing. It is invisible.
@@ -29,10 +35,12 @@ button:Hide()
 
 header:SetFrameRef("button", button)
 header:SetFrameRef("keys", keys)
+header:SetFrameRef("chordKeys", chordKeys)
 
 header:Execute([[
     RINGS, OPT, stack = newtable(), newtable(), newtable()
     BTN, keys = self:GetFrameRef("button"), self:GetFrameRef("keys")
+    chordKeys, SECONDS = self:GetFrameRef("chordKeys"), newtable()
     active, sticky, held, cx, cy = nil, false, nil, 0.5, 0.5
     -- The pointing stick's direction keys held right now (u, d, l, r), whether the stick
     -- pointed while this ring was open (a release only counts after that), the furthest
@@ -80,6 +88,7 @@ header:Execute([[
         if active then owner:Run(Close) end
         active, sticky, held = rid, false, nil
         layerRoot = r.layers and rid or nil
+        chordKeys:ClearBindings()
         stickyPick = nil
         aimCount = 0
         wipe(aimHeld); aimArmed, aimMax, aimLast = false, 0, nil
@@ -226,6 +235,10 @@ header:Execute([[
 header:WrapScript(button, "OnClick", [[
     local b = button
     lastInput = b   -- how the ring was closed (debug log)
+    -- The base button while a chord's second button is held: the base ring, on that layer.
+    local wBase, wChord = strmatch(b, "^w(%d+)_(%d+)$")
+    local chordLayer
+    if wBase then b, chordLayer = "p" .. wBase, tonumber(wChord) end
     local rid = tonumber(strmatch(b, "^r(%d+)$"))
     local pad = tonumber(strmatch(b, "^p(%d+)$"))
     -- /click HaloButton t<id> LeftButton true (the ring's macro, e.g. on a gamepad bar
@@ -249,6 +262,7 @@ header:WrapScript(button, "OnClick", [[
         if owner:Run(Open, pad) then
             sticky = true
             owner:CallMethod("OnRingSticky", pad)
+            if chordLayer then owner:Run(Layer, chordLayer, true) end
         end
         return false
     end
@@ -258,7 +272,10 @@ header:WrapScript(button, "OnClick", [[
             -- The ring's key again closes a ring that stays open; another ring's key opens
             -- that ring (Open closes the current one).
             if active and sticky and owner:Run(Owns, rid) then owner:Run(Close); return false end
-            if owner:Run(Open, rid) then held = rid end
+            if owner:Run(Open, rid) then
+                held = rid
+                if chordLayer then owner:Run(Layer, chordLayer, true) end
+            end
             return false
         end
         if held ~= rid or not active then return false end
@@ -356,6 +373,18 @@ header:WrapScript(button, "OnClick", [[
     end
     if down then owner:Run(Close) end
     return false
+]])
+
+-- A chord's second button (the mouse button is the key's name): held, the base button opens
+-- the chord ring; let go, it opens its own ring again. Then the button's own action runs.
+header:WrapScript(relay, "OnClick", [[
+    local bases = SECONDS[button]
+    if bases and not active then
+        for base, click in pairs(bases) do
+            if down then chordKeys:SetBindingClick(true, base, BTN, click)
+            else chordKeys:ClearBinding(base) end
+        end
+    end
 ]])
 
 -- Sticky selection: the visible ring tells the secure side which slice the stick last
@@ -503,6 +532,27 @@ H.stickName = "Camera"
 
 -- The ring keys of the last build: key -> "r<id>" (keyboard/mouse) or "p<id>" (gamepad).
 local ringBindings = {}
+-- Chord second buttons run through HaloRelay: key -> the /click that does what it did before
+-- (nil: Halo can't pass it on, so the key is left alone and only base-first works).
+local relayKeys, relayInfo = {}, {}
+H.relayInfo = relayInfo   -- (status, tests)
+local BAR_FRAMES = { ACTIONBUTTON = "ActionButton", MULTIACTIONBAR1BUTTON = "MultiBarBottomLeftButton",
+    MULTIACTIONBAR2BUTTON = "MultiBarBottomRightButton", MULTIACTIONBAR3BUTTON = "MultiBarRightButton",
+    MULTIACTIONBAR4BUTTON = "MultiBarLeftButton" }
+-- What a key does, as a /click line; "" when it does nothing; nil when it can't be passed on.
+local function ClickFor(action)
+    if action == nil or action == "" then return "" end
+    local frameName, mouse = action:match("^CLICK ([^:]+):(.+)$")
+    if not frameName then
+        local bar, n = action:match("^(%u[%u%d]-BUTTON)(%d+)$")
+        frameName, mouse = bar and BAR_FRAMES[bar] and (BAR_FRAMES[bar] .. n), "LeftButton"
+    end
+    if not frameName or frameName == "HaloRelay" or not _G[frameName] then return nil end
+    -- The relay acts once, on press or on release as the action bars do; the /click tells the
+    -- button which one it is.
+    local downFlag = GetCVarBool and GetCVarBool("ActionButtonUseKeyDown") and " true" or ""
+    return ("/click %s %s%s"):format(frameName, mouse, downFlag)
+end
 
 -- Blizzard's gamepad panels (crafting: R3 "Set Amount") put their buttons on a binding stack
 -- above the core set (ping on R3...). While a panel there uses a ring's button, the ring lets
@@ -532,6 +582,7 @@ end
 local function ApplyRingKeys()
     ClearOverrideBindings(binds)
     wipe(yielded)
+    wipe(relayInfo)
     local count = 0
     for key, click in pairs(ringBindings) do
         local panel = PanelUses(key)
@@ -540,6 +591,18 @@ local function ApplyRingKeys()
         else
             SetOverrideBindingClick(binds, true, key, "HaloButton", click)
             count = count + 1
+        end
+    end
+    for key in pairs(relayKeys) do
+        if not ringBindings[key] and not PanelUses(key) then
+            local action = GetBindingAction and GetBindingAction(key, true) or ""
+            local macro = ClickFor(action)
+            relayInfo[key] = { action = action, macro = macro }
+            if macro then
+                relay:SetAttribute("*type-" .. key, macro ~= "" and "macro" or nil)
+                relay:SetAttribute("*macrotext-" .. key, macro ~= "" and macro or nil)
+                SetOverrideBindingClick(binds, true, key, "HaloRelay", key)
+            end
         end
     end
     return count
@@ -590,13 +653,16 @@ local function ReassertRingKeys()
         for key, click in pairs(ringBindings) do
             if not yielded[key] and GetBindingAction and GetBindingAction(key, true) ~= "CLICK HaloButton:" .. click then taken = key; break end
         end
+        for key, info in pairs(relayInfo) do
+            if info.macro and GetBindingAction and GetBindingAction(key, true) ~= "CLICK HaloRelay:" .. key then taken = key; break end
+        end
         if not taken then return end
         local count = ApplyRingKeys()
         if H.debug then H.Log(("Blizzard took %s: %d ring keys put back on top"):format(taken, count)) end
     end)
 end
 hooksecurefunc("SetOverrideBinding", function(owner, _, key, action)
-    if owner ~= UIParent or type(action) ~= "string" or action == "" or not ringBindings[key] then return end
+    if owner ~= UIParent or type(action) ~= "string" or action == "" or not (ringBindings[key] or relayKeys[key]) then return end
     if not reassertQueued then
         reassertQueued = true
         C_Timer.After(0, ReassertRingKeys)
@@ -625,9 +691,11 @@ function H.Compile()
             Q(o.numberKeys == true), Q(o.padMode == "tap"),
             Q(H.StickRelease() == "use"), Q(o.stick == "left" and "PADLSTICK" or "PADRSTICK")),
         "local r, s",
+        "wipe(SECONDS)",
     }
     wipe(H.live)
     wipe(ringBindings)
+    wipe(relayKeys)
     -- Chord rings: base button -> { second button -> ring id }. Not bound themselves; the
     -- ring on the base button switches to them while it is open.
     local chords = {}
@@ -664,6 +732,11 @@ function H.Compile()
                 lines[#lines + 1] = "r.layers = newtable()"
                 for second, cid in pairs(layers) do
                     lines[#lines + 1] = ("r.layers[%s] = %d"):format(Q(second), cid)
+                    -- Second button first: while it is held, the base button opens this ring
+                    -- on that layer.
+                    relayKeys[second] = true
+                    lines[#lines + 1] = ("SECONDS[%s] = SECONDS[%s] or newtable(); SECONDS[%s][%s] = %s"):format(
+                        Q(second), Q(second), Q(second), Q(padKey), Q("w" .. ring.id .. "_" .. cid))
                 end
             end
             for i, s in ipairs(slices) do
@@ -799,5 +872,9 @@ function H.Status()
         H.Print(("  %s: %d slices, key %s, gamepad %s%s%s"):format(ring.name, live and #live or 0,
             ring.key or "-", ring.padKey or "-", H.RingActiveHere(ring) and "" or " (other character)",
             #notes > 0 and (" |cffff6040(" .. table.concat(notes, "; ") .. ")|r") or ""))
+    end
+    for key, r in pairs(relayInfo) do
+        H.Print(("  %s first: %s"):format(key, r.macro == nil and ("|cffff6040off|r (can't pass on " .. r.action .. ")")
+            or r.macro == "" and "on" or ("on, then " .. r.macro)))
     end
 end

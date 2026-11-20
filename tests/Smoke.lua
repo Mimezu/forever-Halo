@@ -133,6 +133,7 @@ local function Handle(frame)
             GetAttribute = function(_, name) return frame.attributes[name] end,
             GetFrameRef = function(_, name) return Handle(frame.refs[name]) end,
             ClearBindings = function() overrides[frame] = {} end,
+            ClearBinding = function(_, key) if overrides[frame] then overrides[frame][key] = nil end end,
             SetBindingClick = function(_, _, key, target, button)
                 overrides[frame] = overrides[frame] or {}
                 overrides[frame][key] = (type(target) == "table" and target.name or target) .. ":" .. tostring(button)
@@ -261,7 +262,7 @@ for file in toc:gmatch("\n([%w_]+%.lua)") do
 end
 check(#frames > 0, "files loaded")
 local allowed = { Halo = true, SLASH_HALO1 = true, Halo_OpenOptions = true, HaloHeader = true, HaloButton = true,
-    HaloKeys = true, HaloBindings = true, HaloRing = true, HaloStick = true, HaloStickCatcher = true,
+    HaloKeys = true, HaloBindings = true, HaloRelay = true, HaloChordKeys = true, HaloRing = true, HaloStick = true, HaloStickCatcher = true,
     BINDING_HEADER_HALO = true, BINDING_NAME_HALO_TOGGLE = true, HaloMinimapButton = true }
 for k in pairs(_G) do
     if not before[k] then check(allowed[k], "unexpected global: " .. tostring(k)) end
@@ -974,7 +975,9 @@ do
     layer.slices = { { kind = "emote", token = "bow" } }
     H.Changed("layer"); advance(1)
     local y = "y" .. layer.id
-    check(overrides[binds]["PADLSHOULDER"] == nil and overrides[binds][layer.padKey] == nil, "chord: nothing bound outside a ring")
+    check(overrides[binds][layer.padKey] == nil, "chord: the chord itself is no binding")
+    check(overrides[binds]["PADLSHOULDER"] == "HaloRelay:PADLSHOULDER", "chord: L1 runs through the relay")
+    check(HaloRelay.attributes["*type-PADLSHOULDER"] == nil, "relay: L1 did nothing before, does nothing now")
     stickState.x, stickState.y, stickState.len = 0, 1, 1
     click("p" .. rid, true)
     check(overrides[keys]["PADLSHOULDER"] == "HaloButton:" .. y, "chord: L1 switches layers while open")
@@ -994,6 +997,28 @@ do
     check(click("p" .. rid, true) == "LeftButton" and env.active == nil, "chord tap: the ring button uses the layer's slice")
     click("p" .. rid, false); click(y, false)
     check(click(y, true) == false and env.active == nil, "chord: L1 alone opens nothing")
+    H.SetOption("padMode", "hold"); advance(1); advance(1)
+    -- Second button first: hold L1, then press the base button.
+    local relayClick = function(down) return HaloRelay.pre(Handle(HaloRelay), "PADLSHOULDER", down) end
+    relayClick(true)
+    local w = overrides[HaloChordKeys] and overrides[HaloChordKeys][spells.padKey]
+    check(w == "HaloButton:w" .. rid .. "_" .. layer.id, "L1 held: the base button points at the layer")
+    click("w" .. rid .. "_" .. layer.id, true)
+    check(env.active == layer.id and env.layerRoot == rid, "L1 then base: the layer ring opens")
+    check(next(overrides[HaloChordKeys]) == nil, "opening clears the held-L1 binding")
+    click(y, false)
+    check(env.active == rid, "L1 then base: letting go of L1 goes back to the base ring")
+    click("p" .. rid, false); click("close", true)
+    relayClick(true); relayClick(false)
+    check(overrides[HaloChordKeys][spells.padKey] == nil, "L1 released: the base button is its own again")
+    -- L1's own action is passed on; one Halo can't pass on is left alone.
+    foreign["PADLSHOULDER"] = "ACTIONBUTTON5"; ActionButton5 = Mock("ActionButton5")
+    H.Changed("relay"); advance(1)
+    check(HaloRelay.attributes["*macrotext-PADLSHOULDER"]:match("^/click ActionButton5 LeftButton"), "relay: L1 still uses its action button")
+    foreign["PADLSHOULDER"] = "JUMP"
+    H.Changed("relay"); advance(1)
+    check(overrides[binds]["PADLSHOULDER"] == nil and H.relayInfo.PADLSHOULDER.macro == nil, "relay: an action it can't pass on keeps its key")
+    foreign["PADLSHOULDER"] = nil; ActionButton5 = nil
     stickState.x, stickState.y, stickState.len = 0, 0, 0
     H.SetOption("padMode", "hold"); H.DeleteRing(layer.id); advance(1); advance(1)
 end
