@@ -40,9 +40,7 @@ function H.SetWindowKey(key)
     return true
 end
 
-local IGNORED_KEYS = { LSHIFT = true, RSHIFT = true, LCTRL = true, RCTRL = true, LALT = true, RALT = true,
-    LMETA = true, RMETA = true, UNKNOWN = true }
-local MOUSE_KEYS = { MiddleButton = "BUTTON3", Button4 = "BUTTON4", Button5 = "BUTTON5" }
+local IGNORED_KEYS, MOUSE_KEYS = H.IGNORED_KEYS, H.MOUSE_KEYS
 local capturing
 
 -- A keycap for the window key: click, press a key (modifiers combine, mouse buttons 3-5 and

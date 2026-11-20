@@ -198,6 +198,7 @@ local function WithModifiers(key)
     return prefix .. key
 end
 H.WithModifiers = WithModifiers
+H.IGNORED_KEYS, H.MOUSE_KEYS = IGNORED_KEYS, MOUSE_KEYS
 
 -- A button that captures the next key (field "key") or gamepad button (field "padKey").
 local capturing
