@@ -40,7 +40,7 @@ header:SetFrameRef("chordKeys", chordKeys)
 header:Execute([[
     RINGS, OPT, stack = newtable(), newtable(), newtable()
     BTN, keys = self:GetFrameRef("button"), self:GetFrameRef("keys")
-    chordKeys, SECONDS = self:GetFrameRef("chordKeys"), newtable()
+    chordKeys, SECONDS, PADSECONDS = self:GetFrameRef("chordKeys"), newtable(), newtable()
     active, sticky, held, cx, cy = nil, false, nil, 0.5, 0.5
     -- The pointing stick's direction keys held right now (u, d, l, r), whether the stick
     -- pointed while this ring was open (a release only counts after that), the furthest
@@ -234,6 +234,20 @@ header:Execute([[
 
 header:WrapScript(button, "OnClick", [[
     local b = button
+    -- A gamepad chord's second button already held (hold R2, press R3): read from the pad
+    -- itself at the press, so the second button stays the game's own (R2's bar keeps working)
+    local ps = PADSECONDS[b]
+    if ps then
+        local st = GetGamePadState()
+        local bt = st and st.buttons
+        if bt then
+            for i = 1, #ps do
+                local e = ps[i]
+                local idx = e[1]
+                if bt[idx] then b = e[2]; break end
+            end
+        end
+    end
     lastInput = b   -- how the ring was closed (debug log)
     -- The base button while a chord's second button is held: the base ring, on that layer.
     local wBase, wChord = strmatch(b, "^w(%d+)_(%d+)$")
@@ -691,7 +705,7 @@ function H.Compile()
             Q(o.numberKeys == true), Q(o.padMode == "tap"),
             Q(H.StickRelease() == "use"), Q(o.stick == "left" and "PADLSTICK" or "PADRSTICK")),
         "local r, s",
-        "wipe(SECONDS)",
+        "wipe(SECONDS); wipe(PADSECONDS)",
     }
     wipe(H.live)
     wipe(ringBindings)
@@ -733,10 +747,20 @@ function H.Compile()
                 for second, cid in pairs(layers) do
                     lines[#lines + 1] = ("r.layers[%s] = %d"):format(Q(second), cid)
                     -- Second button first: while it is held, the base button opens this ring
-                    -- on that layer.
-                    relayKeys[second] = true
-                    lines[#lines + 1] = ("SECONDS[%s] = SECONDS[%s] or newtable(); SECONDS[%s][%s] = %s"):format(
-                        Q(second), Q(second), Q(second), Q(padKey), Q("w" .. ring.id .. "_" .. cid))
+                    -- on that layer. A pad button: its held state read from the pad at the
+                    -- base button's press (no relay: the game's own R2 / L1 stay untouched).
+                    -- A key: through the relay.
+                    local index = second:match("^PAD") and C_GamePad and C_GamePad.ButtonBindingToIndex
+                        and C_GamePad.ButtonBindingToIndex(second)
+                    local click = "p" .. ring.id   -- (the base button's click, bound below)
+                    if index and click then
+                        lines[#lines + 1] = ("PADSECONDS[%s] = PADSECONDS[%s] or newtable(); PADSECONDS[%s][#PADSECONDS[%s] + 1] = newtable(%d, %s)"):format(
+                            Q(click), Q(click), Q(click), Q(click), index + 1, Q("w" .. ring.id .. "_" .. cid))
+                    elseif not second:match("^PAD") then
+                        relayKeys[second] = true
+                        lines[#lines + 1] = ("SECONDS[%s] = SECONDS[%s] or newtable(); SECONDS[%s][%s] = %s"):format(
+                            Q(second), Q(second), Q(second), Q(padKey), Q("w" .. ring.id .. "_" .. cid))
+                    end
                 end
             end
             for i, s in ipairs(slices) do

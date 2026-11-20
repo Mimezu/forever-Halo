@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.36 — 2026-11-20
+
+- Fixed: Blizzard's R2 bar stopped switching. A gamepad chord's second button (R2, L1...) no longer runs through Halo's relay: holding it, then pressing the ring's button, is read from the pad itself at the press, so R2 and L1 stay the game's own. Keyboard chords keep the relay
+
 ## 0.9.35 — 2026-11-20
 
 - **Fishing pole**, a new slice (**+** › Fishing pole): one press puts your best fishing pole from the bags in your hands, the next puts back the weapons you held (main hand and off hand). Several poles: the best you can use. No pole: a short note, nothing else happens

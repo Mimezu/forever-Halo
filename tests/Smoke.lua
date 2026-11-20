@@ -976,8 +976,7 @@ do
     H.Changed("layer"); advance(1)
     local y = "y" .. layer.id
     check(overrides[binds][layer.padKey] == nil, "chord: the chord itself is no binding")
-    check(overrides[binds]["PADLSHOULDER"] == "HaloRelay:PADLSHOULDER", "chord: L1 runs through the relay")
-    check(HaloRelay.attributes["*type-PADLSHOULDER"] == nil, "relay: L1 did nothing before, does nothing now")
+    check(overrides[binds]["PADLSHOULDER"] == nil, "chord: no relay on L1 (the game's own L1 stays its own)")
     stickState.x, stickState.y, stickState.len = 0, 1, 1
     click("p" .. rid, true)
     check(overrides[keys]["PADLSHOULDER"] == "HaloButton:" .. y, "chord: L1 switches layers while open")
@@ -998,27 +997,18 @@ do
     click("p" .. rid, false); click(y, false)
     check(click(y, true) == false and env.active == nil, "chord: L1 alone opens nothing")
     H.SetOption("padMode", "hold"); advance(1); advance(1)
-    -- Second button first: hold L1, then press the base button.
-    local relayClick = function(down) return HaloRelay.pre(Handle(HaloRelay), "PADLSHOULDER", down) end
-    relayClick(true)
-    local w = overrides[HaloChordKeys] and overrides[HaloChordKeys][spells.padKey]
-    check(w == "HaloButton:w" .. rid .. "_" .. layer.id, "L1 held: the base button points at the layer")
-    click("w" .. rid .. "_" .. layer.id, true)
-    check(env.active == layer.id and env.layerRoot == rid, "L1 then base: the layer ring opens")
-    check(next(overrides[HaloChordKeys]) == nil, "opening clears the held-L1 binding")
+    -- Second button first: hold L1, then press the base button. L1's held state is read
+    -- from the pad at the press (no relay, no binding on L1).
+    padButtons[5] = true
+    click("p" .. rid, true)
+    check(env.active == layer.id and env.layerRoot == rid, "L1 held, then base: the layer ring opens")
+    padButtons[5] = nil
     click(y, false)
     check(env.active == rid, "L1 then base: letting go of L1 goes back to the base ring")
     click("p" .. rid, false); click("close", true)
-    relayClick(true); relayClick(false)
-    check(overrides[HaloChordKeys][spells.padKey] == nil, "L1 released: the base button is its own again")
-    -- L1's own action is passed on; one Halo can't pass on is left alone.
-    foreign["PADLSHOULDER"] = "ACTIONBUTTON5"; ActionButton5 = Mock("ActionButton5")
-    H.Changed("relay"); advance(1)
-    check(HaloRelay.attributes["*macrotext-PADLSHOULDER"]:match("^/click ActionButton5 LeftButton"), "relay: L1 still uses its action button")
-    foreign["PADLSHOULDER"] = "JUMP"
-    H.Changed("relay"); advance(1)
-    check(overrides[binds]["PADLSHOULDER"] == nil and H.relayInfo.PADLSHOULDER.macro == nil, "relay: an action it can't pass on keeps its key")
-    foreign["PADLSHOULDER"] = nil; ActionButton5 = nil
+    click("p" .. rid, true)
+    check(env.active == rid, "L1 not held: the base ring")
+    click("p" .. rid, false); click("close", true)
     stickState.x, stickState.y, stickState.len = 0, 0, 0
     H.SetOption("padMode", "hold"); H.DeleteRing(layer.id); advance(1); advance(1)
 end
