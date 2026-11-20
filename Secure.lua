@@ -767,6 +767,7 @@ function H.ForgetCompile() lastScript, lastKeySig = nil, nil end
 local function KeySignature()
     local list = {}
     for key, click in pairs(ringBindings) do list[#list + 1] = key .. "=" .. click end
+    for key in pairs(relayKeys) do list[#list + 1] = key .. "=relay" end
     table.sort(list)
     return table.concat(list, ";")
 end
