@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.39 — 2026-11-20
+
+- Open Halo keycap shares the key tables with the ring keycaps
+
 ## 0.9.38 — 2026-11-20
 
 - Fixed: hold R2, press R3, let both go: the R2 ring stayed on screen but the R3 ring's slice was used. A ring opened on a layer (second button held first) now stays that ring until it closes
