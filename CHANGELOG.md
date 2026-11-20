@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.37 — 2026-11-20
+
+- Fixed: hold R2, press R3, use a slice: Blizzard's bar stayed on its R2 page after R2 was let go. A pad button already held when a ring opens is no longer bound by the ring, so its release reaches the game. Once let go, the ring takes it back (at once out of combat, at the next ring input in combat), and a layer button let go returns to the opening ring
+
 ## 0.9.36 — 2026-11-20
 
 - Fixed: Blizzard's R2 bar stopped switching. A gamepad chord's second button (R2, L1...) no longer runs through Halo's relay: holding it, then pressing the ring's button, is read from the pad itself at the press, so R2 and L1 stay the game's own. Keyboard chords keep the relay

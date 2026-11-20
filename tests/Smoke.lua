@@ -68,7 +68,8 @@ C_GamePad = {
     IsEnabled = function() return true end,
     StickIndexToConfigName = function(i) return ({ [0] = "Movement", [1] = "Camera" })[i] end,
     GetDeviceMappedState = function() return { sticks = { { x = 0, y = 0, len = 0 }, stickState }, buttons = padButtons } end,
-    ButtonBindingToIndex = function(name) return ({ PADRSHOULDER = 5, PADLSHOULDER = 4 })[name] end,
+    ButtonBindingToIndex = function(name) return ({ PAD1 = 0, PAD2 = 1, PADLSHOULDER = 4, PADRSHOULDER = 5,
+        PADLTRIGGER = 6, PADRTRIGGER = 7 })[name] end,
 }
 C_Texture = { GetAtlasInfo = function() return { width = 44, height = 44, file = 1, leftTexCoord = 0, rightTexCoord = 1, topTexCoord = 0, bottomTexCoord = 1 } end }
 NineSliceUtil = { ApplyLayoutByName = function() end }
@@ -1002,9 +1003,12 @@ do
     padButtons[5] = true
     click("p" .. rid, true)
     check(env.active == layer.id and env.layerRoot == rid, "L1 held, then base: the layer ring opens")
+    check(overrides[keys]["PADLSHOULDER"] == nil, "L1 held before opening: its release stays the game's")
+    check(overrides[keys]["PADRSHOULDER"] == "HaloButton:use", "L1 held: the other buttons still confirm")
     padButtons[5] = nil
-    click(y, false)
+    click("reclaim", true)
     check(env.active == rid, "L1 then base: letting go of L1 goes back to the base ring")
+    check(overrides[keys]["PADLSHOULDER"] == "HaloButton:" .. y, "L1 let go: the ring takes L1 again")
     click("p" .. rid, false); click("close", true)
     click("p" .. rid, true)
     check(env.active == rid, "L1 not held: the base ring")

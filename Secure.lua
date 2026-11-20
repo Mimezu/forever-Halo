@@ -41,6 +41,10 @@ header:Execute([[
     RINGS, OPT, stack = newtable(), newtable(), newtable()
     BTN, keys = self:GetFrameRef("button"), self:GetFrameRef("keys")
     chordKeys, SECONDS, PADSECONDS = self:GetFrameRef("chordKeys"), newtable(), newtable()
+    -- Pad buttons the open ring binds -> their index in GetGamePadState().buttons. One already
+    -- held when the ring opens (R2 held, then R3) stays the game's own until it is let go:
+    -- its release must reach the game (Blizzard's R2 bar would stay on its R2 page).
+    PADIDX, gameHeld = newtable(), newtable()
     active, sticky, held, cx, cy = nil, false, nil, 0.5, 0.5
     -- The pointing stick's direction keys held right now (u, d, l, r), whether the stick
     -- pointed while this ring was open (a release only counts after that), the furthest
@@ -54,13 +58,18 @@ header:Execute([[
         local r = RINGS[active]
         if not r then return end
         keys:SetBindingClick(true, "ESCAPE", BTN, "close")
-        for i = 1, #r.confirm do keys:SetBindingClick(true, r.confirm[i], BTN, "use") end
-        if r.padCancel then keys:SetBindingClick(true, r.padCancel, BTN, "back") end
+        for i = 1, #r.confirm do
+            local c = r.confirm[i]
+            if not gameHeld[c] then keys:SetBindingClick(true, c, BTN, "use") end
+        end
+        if r.padCancel and not gameHeld[r.padCancel] then keys:SetBindingClick(true, r.padCancel, BTN, "back") end
         -- Layers: the opening ring's chord buttons (R3 ring, R3 + L1 ring...). Bound last, so
         -- they replace a confirm or cancel on the same button.
         local root = layerRoot and RINGS[layerRoot]
         if root and root.layers then
-            for btn, cid in pairs(root.layers) do keys:SetBindingClick(true, btn, BTN, "y" .. cid) end
+            for btn, cid in pairs(root.layers) do
+                if not gameHeld[btn] then keys:SetBindingClick(true, btn, BTN, "y" .. cid) end
+            end
         end
         -- Keep / use on release: the stick's directions are real bindable keys
         -- (PADRSTICKUP...). Each time the stick enters or leaves one, "aim<dir>" reads the
@@ -89,6 +98,14 @@ header:Execute([[
         active, sticky, held = rid, false, nil
         layerRoot = r.layers and rid or nil
         chordKeys:ClearBindings()
+        wipe(gameHeld); gameHeldAny = false
+        local st = GetGamePadState()
+        local bt = st and st.buttons
+        if bt then
+            for key, idx in pairs(PADIDX) do
+                if bt[idx] then gameHeld[key], gameHeldAny = true, true end
+            end
+        end
         stickyPick = nil
         aimCount = 0
         wipe(aimHeld); aimArmed, aimMax, aimLast = false, 0, nil
@@ -117,6 +134,7 @@ header:Execute([[
         stickyPick = nil
         wipe(aimHeld); aimArmed, aimMax, aimLast = false, 0, nil
         wipe(stack)
+        wipe(gameHeld); gameHeldAny = false
         keys:ClearBindings()
         BTN:Hide()
         owner:CallMethod("OnRingClose", was, used, lastInput, aimCount or 0)
@@ -221,6 +239,31 @@ header:Execute([[
         owner:CallMethod("OnRingSwitch", target, not down)
     ]==]
 
+    -- A button held since the ring opened, now let go: the game had its release, so the ring
+    -- takes it again. A layer button let go: back to the opening ring.
+    Reclaim = [==[
+        if not active or not gameHeldAny then return end
+        local st = GetGamePadState()
+        local bt = st and st.buttons
+        if not bt then return end
+        local root = layerRoot and RINGS[layerRoot]
+        local changed, back
+        gameHeldAny = false
+        for key in pairs(gameHeld) do
+            local idx = PADIDX[key]
+            if not (idx and bt[idx]) then
+                gameHeld[key] = nil
+                changed = true
+                local cid = root and root.layers and root.layers[key]
+                if cid and active == cid then back = cid end
+            else
+                gameHeldAny = true
+            end
+        end
+        if back then owner:Run(Layer, back, false)
+        elseif changed then owner:Run(SetKeys) end
+    ]==]
+
     -- The open ring is this one, or was opened from it (nested rings).
     Owns = [==[
         local rid = ...
@@ -248,6 +291,9 @@ header:WrapScript(button, "OnClick", [[
             end
         end
     end
+    -- Any input while open: first take back the buttons let go since the ring opened.
+    if active and gameHeldAny then owner:Run(Reclaim) end
+    if b == "reclaim" then return false end   -- (the watcher below, out of combat)
     lastInput = b   -- how the ring was closed (debug log)
     -- The base button while a chord's second button is held: the base ring, on that layer.
     local wBase, wChord = strmatch(b, "^w(%d+)_(%d+)$")
@@ -410,8 +456,35 @@ function H.SetStickyPick(i)
 end
 
 -- Callbacks into the visible ring -----------------------------------------------------------
-function header:OnRingOpen(rid, x, y) H.Fire("open", rid, x, y) end
-function header:OnRingClose(rid, used, input, aims) H.Fire("close", rid, used, input, aims) end
+-- A pad button held when the ring opened is the game's own until let go. Out of combat this
+-- watcher hands it back to the ring right at the release; in combat the ring's next input does.
+local padIndex = {}      -- pad button -> index in the pad state's buttons (set by Compile)
+local heldAtOpen = {}
+local watcher = CreateFrame("Frame")
+watcher:Hide()
+watcher:SetScript("OnUpdate", function(self)
+    local st = C_GamePad and C_GamePad.GetDeviceMappedState and C_GamePad.GetDeviceMappedState()
+    local bt = st and st.buttons or {}
+    local any, let = false, false
+    for key in pairs(heldAtOpen) do
+        if bt[padIndex[key]] then any = true else heldAtOpen[key] = nil; let = true end
+    end
+    if let and not InCombatLockdown() then button:Click("reclaim") end
+    if not any then self:Hide() end
+end)
+
+function header:OnRingOpen(rid, x, y)
+    wipe(heldAtOpen)
+    local st = C_GamePad and C_GamePad.GetDeviceMappedState and C_GamePad.GetDeviceMappedState()
+    local bt = st and st.buttons
+    if bt then
+        for key, idx in pairs(padIndex) do
+            if bt[idx] then heldAtOpen[key] = true; watcher:Show() end
+        end
+    end
+    H.Fire("open", rid, x, y)
+end
+function header:OnRingClose(rid, used, input, aims) wipe(heldAtOpen); watcher:Hide(); H.Fire("close", rid, used, input, aims) end
 function header:OnRingSwitch(rid, back) H.Fire("switch", rid, back) end
 function header:OnRingSticky(rid) H.Fire("sticky", rid) end
 function header:OnStickyPick(i) H.Fire("stickypick", i) end
@@ -705,8 +778,24 @@ function H.Compile()
             Q(o.numberKeys == true), Q(o.padMode == "tap"),
             Q(H.StickRelease() == "use"), Q(o.stick == "left" and "PADLSTICK" or "PADRSTICK")),
         "local r, s",
-        "wipe(SECONDS); wipe(PADSECONDS)",
+        "wipe(SECONDS); wipe(PADSECONDS); wipe(PADIDX)",
     }
+    -- Every pad button an open ring may bind (confirm, back, layer buttons): its pad index.
+    wipe(padIndex)
+    local function AddPadIndex(key)
+        local index = type(key) == "string" and key:match("^PAD") and C_GamePad and C_GamePad.ButtonBindingToIndex
+            and C_GamePad.ButtonBindingToIndex(key)
+        if index and not padIndex[key] then
+            padIndex[key] = index + 1
+            lines[#lines + 1] = ("PADIDX[%s] = %d"):format(Q(key), index + 1)
+        end
+    end
+    for _, key in ipairs(CONFIRM) do AddPadIndex(key) end
+    AddPadIndex("PAD2")
+    for _, ring in ipairs(H.db.rings) do
+        local _, second = H.SplitChord(ring.padKey)
+        AddPadIndex(second)
+    end
     wipe(H.live)
     wipe(ringBindings)
     wipe(relayKeys)
