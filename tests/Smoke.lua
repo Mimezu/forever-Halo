@@ -1212,6 +1212,17 @@ do
     local fishAttr = H.SliceAttributes({ kind = "fish" })
     check(fishAttr and fishAttr.type == "macro" and type(fishAttr.macrotext) == "string", "a fishing slice runs a macro")
     check(H.SliceKnown({ kind = "fish" }), "a fishing slice always shows (it says when there's no pole)")
+    -- Trinket slots (like Gamepad Companion's Trinket 1 / 2), in Automatic.
+    local autoRow = rowNamed(1, "Automatic")
+    autoRow.scripts.OnEnter(autoRow)
+    check(rowNamed(2, "Trinket 1") and rowNamed(2, "Trinket 2"), "Automatic lists Trinket 1 and Trinket 2")
+    local tAttr = H.SliceAttributes({ kind = "trinket", slot = 14 })
+    check(tAttr and tAttr.macrotext == "/use 14", "Trinket 2 uses slot 14")
+    check(H.SliceKnown({ kind = "trinket", slot = 13 }), "a trinket slice always shows")
+    GetInventoryItemTexture = function(_, slot) return slot == 13 and 12345 or nil end
+    check(select(2, H.SliceInfo({ kind = "trinket", slot = 13 })) == 12345, "a trinket slice shows the worn trinket")
+    check(select(2, H.SliceInfo({ kind = "trinket", slot = 14 })):match("Talisman_02$"), "an empty slot: a plain icon")
+    GetInventoryItemTexture = nil
     check(rowNamed(1, "Another ring").entry.disabled ~= true, "other rings can be nested")
     check(rowNamed(1, "Add to Menu ring").entry.title and not rowNamed(1, "Add to Menu ring").hover.shown, "the title is not a button")
     -- Hovering a group opens its submenu; hovering another group swaps it.

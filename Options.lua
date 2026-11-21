@@ -527,6 +527,9 @@ local function AddMenu(owner)
     for _, a in ipairs(H.AUTO) do
         auto[#auto + 1] = { text = a[2], func = function() AddSlice({ kind = "auto", source = a[1] }) end }
     end
+    for _, t in ipairs(H.TRINKETS) do
+        auto[#auto + 1] = { text = t[2], func = function() AddSlice({ kind = "trinket", slot = t[1] }) end }
+    end
     Group("Automatic", auto)
     local emotes, byGroup = {}, {}
     for _, name in ipairs(H.EMOTE_GROUPS) do

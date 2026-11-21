@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.41 — 2026-11-21
+
+- **Trinket 1** and **Trinket 2** in **+** › Automatic: a slice that uses whatever trinket you wear in that slot, with its icon and cooldown (like Gamepad Companion's)
+
 ## 0.9.40 — 2026-11-20
 
 - Fixed: a pad button held when a ring opened, then let go, raised an error ("Cannot call restricted closure from insecure code") instead of going back to the ring

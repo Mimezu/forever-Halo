@@ -406,6 +406,42 @@ K.fish = {
     end,
 }
 
+-- A trinket slot (13, 14): whatever trinket is worn there, like Gamepad Companion's
+-- Trinket 1 / Trinket 2. "/use 13" follows a trinket swap, in combat too.
+H.TRINKETS = {
+    { 13, "Trinket 1", "Interface\\Icons\\INV_Jewelry_Talisman_01" },
+    { 14, "Trinket 2", "Interface\\Icons\\INV_Jewelry_Talisman_02" },
+}
+local TRINKET_BY_SLOT = {}
+for _, t in ipairs(H.TRINKETS) do TRINKET_BY_SLOT[t[1]] = t end
+local function TrinketSlot(s) return TRINKET_BY_SLOT[tonumber(s.slot)] and tonumber(s.slot) or 13 end
+K.trinket = {
+    label = "Trinket",
+    info = function(s)
+        local t = TRINKET_BY_SLOT[TrinketSlot(s)]
+        local icon = GetInventoryItemTexture and Call(GetInventoryItemTexture, "player", t[1])
+        return t[2], Plain(icon) or t[3]
+    end,
+    known = function() return true end,
+    attr = function(s) return { type = "macro", macrotext = "/use " .. TrinketSlot(s) } end,
+    state = function(s)
+        local slot = TrinketSlot(s)
+        local worn = GetInventoryItemID and Call(GetInventoryItemID, "player", slot)
+        if not worn then return nil, nil, nil, false, false end
+        local start, duration = Call(GetInventoryItemCooldown, "player", slot)
+        return nil, start, duration, true, false
+    end,
+    tooltip = function(s, tip)
+        local slot = TrinketSlot(s)
+        if GetInventoryItemID and Call(GetInventoryItemID, "player", slot) then
+            tip:SetInventoryItem("player", slot)
+        else
+            tip:AddLine(TRINKET_BY_SLOT[slot][2], 1, 1, 1)
+            tip:AddLine("Empty slot", 0.75, 0.75, 0.75)
+        end
+    end,
+}
+
 K.ring = {
     label = "Ring",
     info = function(s)
