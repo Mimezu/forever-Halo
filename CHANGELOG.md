@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.42 — 2026-11-25
+
+- Ring keys stay bound and are only rewritten, never all cleared and bound again: rebinding could pick up another addon's leftover gamepad function (Mute ran Focus UI)
+
 ## 0.9.41 — 2026-11-21
 
 - **Trinket 1** and **Trinket 2** in **+** › Automatic: a slice that uses whatever trinket you wear in that slot, with its icon and cooldown (like Gamepad Companion's)

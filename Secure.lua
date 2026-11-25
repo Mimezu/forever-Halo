@@ -674,32 +674,53 @@ local function PanelUses(key)
     end
 end
 
+-- Each key written in place (which also puts it back on top); only a key no longer wanted is
+-- let go; never all cleared and rebound. A key let go and bound again can be handed back another
+-- addon's cleared gamepad function with it (the game reuses the record): Mute ran Companion's
+-- Focus UI after this cleared and rebound it (GPC trace 2026-11-25). A record kept is never
+-- handed anything
+local bound = {}   -- key -> "button:click" written on binds
+local function BindKey(key, button, click)
+    if button then
+        SetOverrideBindingClick(binds, true, key, button, click)
+        bound[key] = button .. ":" .. click
+    elseif bound[key] then
+        SetOverrideBinding(binds, true, key, nil)
+        bound[key] = nil
+    end
+end
 local function ApplyRingKeys()
-    ClearOverrideBindings(binds)
+    local before = {}
+    for key, info in pairs(relayInfo) do before[key] = info.action end
     wipe(yielded)
     wipe(relayInfo)
+    local want = {}
     local count = 0
     for key, click in pairs(ringBindings) do
         local panel = PanelUses(key)
         if panel then
             yielded[key] = panel
         else
-            SetOverrideBindingClick(binds, true, key, "HaloButton", click)
+            want[key] = { "HaloButton", click }
             count = count + 1
         end
     end
     for key in pairs(relayKeys) do
         if not ringBindings[key] and not PanelUses(key) then
             local action = GetBindingAction and GetBindingAction(key, true) or ""
+            -- (our own relay still on the key: what it passed on before)
+            if action == "CLICK HaloRelay:" .. key then action = before[key] or "" end
             local macro = ClickFor(action)
             relayInfo[key] = { action = action, macro = macro }
             if macro then
                 relay:SetAttribute("*type-" .. key, macro ~= "" and "macro" or nil)
                 relay:SetAttribute("*macrotext-" .. key, macro ~= "" and macro or nil)
-                SetOverrideBindingClick(binds, true, key, "HaloRelay", key)
+                want[key] = { "HaloRelay", key }
             end
         end
     end
+    for key in pairs(bound) do if not want[key] then BindKey(key) end end
+    for key, w in pairs(want) do BindKey(key, w[1], w[2]) end
     return count
 end
 

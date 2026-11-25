@@ -221,7 +221,9 @@ function SaveBindings() bindingsSaved = bindingsSaved + 1 end
 function GetCurrentBindingSet() return 1 end
 -- key -> owner of the most recent override and its action (the most recent one wins in game)
 bindOrder, bindTop = {}, {}
+clearedWhole = {}
 function ClearOverrideBindings(owner)
+    clearedWhole[owner] = (clearedWhole[owner] or 0) + 1
     overrides[owner] = {}
     for key, o in pairs(bindOrder) do if o == owner then bindOrder[key], bindTop[key] = nil, nil end end
 end
@@ -231,6 +233,8 @@ function SetOverrideBindingClick(owner, _, key, target, button)
     bindOrder[key], bindTop[key] = owner, "CLICK " .. target .. ":" .. button
 end
 function SetOverrideBinding(owner, _, key, action)
+    overrides[owner] = overrides[owner] or {}
+    if not action or action == "" then overrides[owner][key] = nil end
     if action and action ~= "" then bindOrder[key], bindTop[key] = owner, action
     elseif bindOrder[key] == owner then bindOrder[key], bindTop[key] = nil, nil end   -- clearing removes its own
 end
@@ -291,7 +295,7 @@ check(env.RINGS[1].n == 2, "secure ring 1 has 2 slices")
 check(env.RINGS[1][1].attr.type == "item" and env.RINGS[1][1].attr.item == "item:118", "item attributes")
 check(env.RINGS[3].n == 8, "emote ring")
 check(env.RINGS[3][1].attr.macrotext == "/wave", "emote macro text")
-check(next(overrides[binds]) == nil, "no keys bound by default")
+check(next(overrides[binds] or {}) == nil, "no keys bound by default")
 
 -- A spell ring with a nested ring, bound to Q and a gamepad chord.
 local spells = H.NewRing("Spells")
@@ -1056,6 +1060,7 @@ do
     check(overrides[binds][key] == nil, "panel: a rebuild does not take it back")
     m:RemoveSet(panel); advance(1)
     check(overrides[binds][key] == "HaloButton:p" .. rid and not H.yieldedKeys[key], "panel closed: the ring takes it back")
+    check(not clearedWhole[binds], "ring keys written in place, never all cleared (a key let go can be handed a cleared Focus UI)")
     local block = Set("Blocker", { type = "InputButtonBinding", buttonToClick = "" })
     m:AddBindingSet(block); advance(1)
     check(overrides[binds][key] == "HaloButton:p" .. rid, "panel: an empty block binding does not count")
